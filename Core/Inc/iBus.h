@@ -37,12 +37,6 @@ void ibus_init(UART_HandleTypeDef* huart);
  */
 bool ibus_read(uint16_t* ibus_data);
 
-/*
- * Requires: 
- * Modifies: 
- * Effects: 
- */
-void ibus_update(uint16_t* ibus_data);
 
 /*
  * Requires: 
@@ -50,20 +44,6 @@ void ibus_update(uint16_t* ibus_data);
  * Effects: 
  */
 void ibus_failsafe_check();
-
-/*
- * Requires: Nothing
- * Modifies: Nothing
- * Effects: Checks that the first two bytes of the frame are correct
- */
-bool ibus_verify_start(void);
-
-/*
- * Requires: 
- * Modifies: 
- * Effects: 
- */
-bool ibus_checksum(void);
 
 /*
  * Requires: 

@@ -23,6 +23,16 @@ static uint32_t motor_2_dma_buf[DSHOT_DMA_BUFFER_SIZE];
 static uint32_t motor_3_dma_buf[DSHOT_DMA_BUFFER_SIZE];
 static uint32_t motor_4_dma_buf[DSHOT_DMA_BUFFER_SIZE];
 
+// Static Functions
+static uint16_t get_dshot_tick_freq_hz(dshot_type_e dshot_type);
+static void dshot_set_timers(dshot_type_e dshot_type);
+static uint16_t dshot_make_packet(const uint16_t* motor_command);
+static void dshot_prepare_dma(uint32_t* motor_dma_buf, const uint16_t* motor_command);
+static void dshot_prepare_dma_all(const uint16_t* motor_throttles);
+static void dshot_start_dma(void);
+static void dshot_start_pwm(void);
+
+
 void dshot_init(dshot_type_e dshot_type) {
     dshot_set_timers(dshot_type);
     dshot_start_pwm();

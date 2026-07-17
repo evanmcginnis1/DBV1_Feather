@@ -4,22 +4,16 @@
  * Created on: July 16, 2026
  * Author: Evan McGinnis
  * 
+ * Implementation note: MUST check box in STM32CubeMX->Project Manager->Code Generator->Generated Files for "generate
+   peripheral initialization as a pair of .c and .h files." That way, timer objects are created as extern, so they can
+   be used here without having to pass them to every function
  */
 
  #ifndef DSHOT_H
  #define DSHOT_H
 
-/*
-Functions to define:
-dshot_set_timers
-dshot_start_pwm
-dshot_make_packet
-dshot_prepare_dma_buf
-dshot_start_dma
-*/
-
 #include "stm32f4xx_hal.h"
-#include <tim.h>
+#include "tim.h"
 
 // TIM1 is on slower APB1 bus, while TIM8 is on faster APB2 bus.
 #define TIM3_CLK 84000000
@@ -71,29 +65,25 @@ Effects:  Converts motor_throttles into DShot CCR values. Then, passes them into
 */
 void dshot_write(const uint16_t* motor_throttles);
 
+//Rest of functions are static in DShot.c
 /*
 Requires: dshot_type is a valid member of dshot_type_e
 Modifies: Nothing
 Effects: Returns the tick frequency for a given DShot type
 */
-static uint16_t get_dshot_tick_freq_hz(dshot_type_e dshot_type);
+//static uint16_t get_dshot_tick_freq_hz(dshot_type_e dshot_type);
 
 /*
 Requires: dshot_type is a valid member of dshot_type_e
 Modifies: Prescaler and ARR registers
 Effects:  Sets prescaler and ARR for each pwm channel used so that timings will be correct for chosen DShot speed
 */
-static void dshot_set_timers(dshot_type_e dshot_type);
-
-static void dshot_start_pwm(void);
-
-static uint16_t dshot_make_packet(const uint16_t* motor_command);
-
-static void dshot_prepare_dma(uint32_t* motor_dma_buf, const uint16_t* motor_command);
-
-static void dshot_prepare_dma_all(const uint16_t* motor_throttles);
-
-static void dshot_start_dma(void);
+//static void dshot_set_timers(dshot_type_e dshot_type);
+//static void dshot_start_pwm(void);
+//static uint16_t dshot_make_packet(const uint16_t* motor_command);
+//static void dshot_prepare_dma(uint32_t* motor_dma_buf, const uint16_t* motor_command);
+//static void dshot_prepare_dma_all(const uint16_t* motor_throttles);
+//static void dshot_start_dma(void);
 
 
 

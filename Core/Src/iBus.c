@@ -11,6 +11,11 @@
 static uint8_t uart_buf[IBUS_FRAME_SIZE] = {0};
 static uint8_t failsafe_flag_count = 0;
 
+//static functions
+static void ibus_update(uint16_t* ibus_data);
+static bool ibus_verify_start(void);
+static bool ibus_checksum(void);
+
 // Tell DMA to target uart_buf variable
 void ibus_init(UART_HandleTypeDef* huart) {
     HAL_UART_Receive_DMA(huart, uart_buf, IBUS_FRAME_SIZE);
@@ -30,7 +35,7 @@ bool ibus_read(uint16_t* ibus_data) {
     return true; 
 }
 
-void ibus_update(uint16_t* ibus_data) {
+static void ibus_update(uint16_t* ibus_data) {
     for (int channel_idx = 0, buf_idx = 2; channel_idx < IBUS_NUM_CHANNELS; channel_idx++, buf_idx += 2) {
         ibus_data[channel_idx] = (uart_buf[buf_idx] | uart_buf[buf_idx + 1] << 8);
     }
@@ -49,12 +54,12 @@ void ibus_failsafe_check(uint16_t* ibus_data) {
     }
 }
 
-bool ibus_verify_start(void) {
+static bool ibus_verify_start(void) {
     return (uart_buf[0] == IBUS_LENGTH && uart_buf[1] == IBUS_THROTTLE_COMMAND);
 }
 
 // checksum = sum of all bytes besides the checksum itself
-bool ibus_checksum(void) {
+static bool ibus_checksum(void) {
     uint16_t checksum_theo = 0xFFFF;
 
     // last two bytes are checksum, so ignore
