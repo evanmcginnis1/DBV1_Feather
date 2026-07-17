@@ -35,6 +35,7 @@ bool ibus_read(uint16_t* ibus_data) {
     return true; 
 }
 
+// ibus_data is an array where each index in the array represents a channel whose value is between 1000 and 2000
 static void ibus_update(uint16_t* ibus_data) {
     for (int channel_idx = 0, buf_idx = 2; channel_idx < IBUS_NUM_CHANNELS; channel_idx++, buf_idx += 2) {
         ibus_data[channel_idx] = (uart_buf[buf_idx] | uart_buf[buf_idx + 1] << 8);
@@ -74,4 +75,13 @@ static bool ibus_checksum(void) {
 
 void ibus_reset_failsafe(void) {
     failsafe_flag_count = 0;
+}
+
+//convert ibus channel data into a number between 0 and 1000 (effectively a percent without using floats)
+void ibus_read_as_percents(uint16_t* ibus_data_percents) {
+    uint16_t ibus_data[IBUS_NUM_CHANNELS];
+    ibus_read(ibus_data);
+    for (int i = 0; i < IBUS_NUM_CHANNELS; i++) {
+        ibus_data[i] -= 1000;
+    }
 }

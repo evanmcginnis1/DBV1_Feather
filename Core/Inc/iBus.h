@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define IBUS_UART &huart1
 #define IBUS_NUM_CHANNELS 14
 #define IBUS_FRAME_SIZE 32
 //adjust so that max delay between dead reciever and full shutdown is <0.3s
@@ -51,5 +52,9 @@ void ibus_failsafe_check();
  * Effects: 
  */
 void ibus_reset_failsafe(void);
+
+// Does same thing as ibus_read, but outputs data for each channel as a number between 0 and 1000, rather than between 
+// 1000 and 2000
+void ibus_read_as_percents(uint16_t* ibus_data_percents);
 
 #endif
