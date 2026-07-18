@@ -32,7 +32,9 @@
 void ibus_init(UART_HandleTypeDef* huart);
 
 /*
- * Requires: ibus_data is an array of 16-bit variables with size equal to the number of channels
+ * Requires: ibus_data is an array of 16-bit variables with size equal to the number of channels. 
+ * idx map: 
+ 1: 
  * Modifies: 
  * Effects: 
  */
@@ -55,6 +57,7 @@ void ibus_reset_failsafe(void);
 
 // Does same thing as ibus_read, but outputs data for each channel as a number between 0 and 1000, rather than between 
 // 1000 and 2000
+// 
 void ibus_read_as_percents(uint16_t* ibus_data_percents);
 
 #endif

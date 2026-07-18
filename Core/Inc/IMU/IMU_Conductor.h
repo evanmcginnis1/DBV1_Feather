@@ -19,7 +19,7 @@
 * Modifies: 
 * Effects:
 */
-void IMU_begin(I2C_HandleTypeDef* hi2c);
+void IMU_init(I2C_HandleTypeDef* hi2c);
 
-void update_IMU_model(IMU_Model_t* imu_model);
+void IMU_update_model(IMU_Model_t* imu_model);
 #endif /* IMU_CONDUCTOR_H_ */

@@ -7,6 +7,8 @@
  *      implementation of low-level functions for interfacing with BNO055 IMU sensor
  */
 
+ //TODO: Make functions static
+
 #include "IMU_Hardware.h"
 #include "IMU_Config.h"
 #include "main.h"
@@ -45,6 +47,7 @@ HAL_StatusTypeDef set_IMU_page(IMU_Page_Sel_t page_num) {
 	//cast page_num to be a uint8_t explicitly
 	return write_IMU_register(IMU_REG_PAGE_ID, (uint8_t*)&page_num);
 }
+
 /*************************************************
 *           IMU Overall Configuration            *
 **************************************************/
