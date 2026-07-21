@@ -174,6 +174,7 @@ IMU_MAG_OPR_MODE_HIGH_ACCURACY =    0x03u
 	#error "invalid temperature unit selection"
 #endif
 
+
 #define IMU_MAG_SCALAR 16
 #define IMU_QUAT_SCALAR (1 << 14)
 #endif /* SRC_IMU_CONFIG_H_ */

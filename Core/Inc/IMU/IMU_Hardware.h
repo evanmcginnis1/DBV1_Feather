@@ -85,8 +85,28 @@ typedef enum {
 *             IMU Data Registers              *
 **************************************************/
 
+//raw gyro data register
+#define IMU_REG_GYR_DATA_X_LSB 0x14
+#define IMU_REG_GYR_DATA_X_MSB 0x15
+
+#define IMU_REG_GYR_DATA_Y_LSB 0x16
+#define IMY_REG_GYR_DATA_Y_MSB 0x17
+
+#define IMU_REG_GYR_DATA_Z_LSB 0x18
+#define IMU_REG_GYR_DATA_Z_MSB 0x19
+
 //FUSED
-//Quaternion orientation registers
+// Fused Euler orientation data registers
+#define IMU_REG_EUL_DATA_X_LSB 0x1A
+#define IMU_REG_EUL_DATA_X_MSB 0x1B
+
+#define IMU_REG_EUL_DATA_Y_LSB 0x1C
+#define IMU_REG_EUL_DATA_Y_MSB 0x1D
+
+#define IMU_REG_EUL_DATA_Z_LSB 0x1E
+#define IMU_REG_EUL_DATA_Z_MSB 0x1F
+
+//Fused Quaternion orientation registers
 #define IMU_REG_QUA_DATA_W_LSB 0x20
 #define IMU_REG_QUA_DATA_W_MSB 0x21
 
@@ -99,15 +119,7 @@ typedef enum {
 #define IMU_REG_QUA_DATA_Z_LSB 0x26
 #define IMU_REG_QUA_DATA_Z_MSB 0x27
 
-// Fused Euler orientation data registers
-#define IMU_REG_EUL_DATA_X_LSB 0x1A
-#define IMU_REG_EUL_DATA_X_MSB 0x1B
 
-#define IMU_REG_EUL_DATA_Y_LSB 0x1C
-#define IMU_REG_EUL_DATA_Y_MSB 0x1D
-
-#define IMU_REG_EUL_DATA_Z_LSB 0x1E
-#define IMU_REG_EUL_DATA_Z_MSB 0x1F
 
 //Linear acceleration data registers
 #define IMU_REG_LIA_DATA_X_LSB 0x28
@@ -118,6 +130,8 @@ typedef enum {
 
 #define IMU_REG_LIA_DATA_Z_LSB 0x2C
 #define IMU_REG_LIA_DATA_Z_MSB 0x2D
+
+
 
 //gravity vector data
 #define IMU_REG_GRV_DATA_X_LSB 0x2E
@@ -517,6 +531,7 @@ HAL_StatusTypeDef get_IMU_grav_data(float* grav_x, float* grav_y, float* grav_z)
 */
 HAL_StatusTypeDef get_IMU_lin_accel_data(float* linaccel_x, float* linaccel_y, float* linaccel_z);
 
+HAL_StatusTypeDef get_IMU_gyro_rawdata(float* pitch, float* roll, float* yaw);
 /*
 * Requires: 
 * Modifies:

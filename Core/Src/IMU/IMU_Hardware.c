@@ -12,6 +12,7 @@
 #include "IMU_Hardware.h"
 #include "IMU_Config.h"
 #include "main.h"
+#include "stm32f4xx_hal_def.h"
 #include <stdbool.h>
 //TODO: update resolution settings - disregard non-included bits
 
@@ -293,6 +294,25 @@ HAL_StatusTypeDef get_IMU_quat_data(float* QUAT_w, float* QUAT_x, float* QUAT_y,
 	*QUAT_x = (float) QUAT_x_raw / IMU_QUAT_SCALAR;
 	*QUAT_y = (float) QUAT_y_raw / IMU_QUAT_SCALAR;
 	*QUAT_z = (float) QUAT_z_raw / IMU_QUAT_SCALAR;
+
+	return status;
+}
+
+HAL_StatusTypeDef get_IMU_gyro_rawdata(float *pitch, float *roll, float *yaw) {
+	HAL_StatusTypeDef status;
+	uint8_t gyr_data[6];
+	status = read_IMU_register(IMU_REG_GYR_DATA_X_LSB, gyr_data, 6);
+	if (status != HAL_OK) {
+		return status;
+	}
+
+	int16_t GYR_x_raw = (int16_t)(gyr_data[0] | (gyr_data[1] << 8));
+	int16_t GYR_y_raw = (int16_t)(gyr_data[2] | (gyr_data[3] << 8));
+	int16_t GYR_z_raw = (int16_t)(gyr_data[4] | (gyr_data[5] << 8));
+
+	*pitch = (float) GYR_x_raw / IMU_EULER_ANGLE_SCALAR;
+	*roll = (float) GYR_y_raw / IMU_EULER_ANGLE_SCALAR;
+	*yaw = (float) GYR_z_raw / IMU_EULER_ANGLE_SCALAR;
 
 	return status;
 }

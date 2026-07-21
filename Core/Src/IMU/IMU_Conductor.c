@@ -18,9 +18,10 @@ void IMU_init(I2C_HandleTypeDef* hi2c) {
     //does nothing for now
     IMU_calibrate_sensors();
 }
-//check
+
 void IMU_update_model(IMU_Model_t* imu_model) {
-    get_IMU_euler_data(&(imu_model->heading), &(imu_model->roll), &(imu_model->pitch));
+    get_IMU_euler_data(&(imu_model->yaw_rate), &(imu_model->roll_rate), &(imu_model->pitch_rate));
+    get_IMU_gyro_rawdata(&(imu_model->pitch_rate), &(imu_model->roll_rate), &(imu_model->yaw_rate));
 }
 
  

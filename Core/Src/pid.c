@@ -63,11 +63,11 @@ void pid_update(const IMU_Model_t *imu, const uint16_t *pilot_command, float *es
 //pilot_command[4] = ARM/DISARM
 static void pid_step_all(const IMU_Model_t* imu, const float* setpoint) {
     //PID roll step
-    pid_step(&pid_roll_info, &imu->roll, &setpoint[0], &pid_axis_out_pct.roll_pct);
+    pid_step(&pid_roll_info, &imu->roll_abs, &setpoint[0], &pid_axis_out_pct.roll_pct);
     //PID pitch step
-    pid_step(&pid_pitch_info, &imu->pitch, &setpoint[1], &pid_axis_out_pct.pitch_pct);
+    pid_step(&pid_pitch_info, &imu->pitch_abs, &setpoint[1], &pid_axis_out_pct.pitch_pct);
     //PID yaw step
-    pid_step(&pid_yaw_info, &imu->heading, &setpoint[3], &pid_axis_out_pct.yaw_pct);
+    pid_step(&pid_yaw_info, &imu->yaw_rate, &setpoint[3], &pid_axis_out_pct.yaw_pct);
 
     return;
 }
