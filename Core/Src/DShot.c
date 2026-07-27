@@ -13,6 +13,8 @@
 
 #include "DShot.h"
 #include "stm32f4xx_hal.h"
+#include "stm32f4xx_hal_def.h"
+#include "stm32f4xx_hal_gpio.h"
 #include "stm32f4xx_hal_tim.h"
 #include <stdint.h>
 #include <math.h>
@@ -24,28 +26,39 @@ static uint32_t motor_3_dma_buf[DSHOT_DMA_BUFFER_SIZE];
 static uint32_t motor_4_dma_buf[DSHOT_DMA_BUFFER_SIZE];
 
 // Static Functions
-static uint16_t get_dshot_tick_freq_hz(dshot_type_e dshot_type);
+static uint32_t get_dshot_tick_freq_hz(dshot_type_e dshot_type);
 static void dshot_set_timers(dshot_type_e dshot_type);
 static uint16_t dshot_make_packet(const uint16_t* motor_command);
 static void dshot_prepare_dma(uint32_t* motor_dma_buf, const uint16_t* motor_command);
 static void dshot_prepare_dma_all(const uint16_t* motor_throttles);
 static void dshot_start_dma(void);
 static void dshot_start_pwm(void);
+static void dshot_enable_dma_request(void);
+static void dshot_put_tc_callback_function(void);
+static void dshot_dma_tc_callback(DMA_HandleTypeDef *hdma);
+
 
 
 void dshot_init(dshot_type_e dshot_type) {
     dshot_set_timers(dshot_type);
+    dshot_put_tc_callback_function();
     dshot_start_pwm();
 }
 
+// test if prescaler settings are correct
 void dshot_write(const uint16_t* motor_throttles) {
+    //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
+    //motor_1_dma_buf[0] = 0b11111111;
     dshot_prepare_dma_all(motor_throttles);
     dshot_start_dma();
+    dshot_enable_dma_request();
+    //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
 }
 
 //tick frequency = bit rate (same as baud rate) * tick length
-static uint16_t get_dshot_tick_freq_hz(dshot_type_e dshot_type) {
-    uint16_t dshot_tick_freq = (uint16_t)dshot_type * DSHOT_BIT_LENGTH;
+static uint32_t get_dshot_tick_freq_hz(dshot_type_e dshot_type) {
+    uint32_t dshot_bitrate = (uint32_t)dshot_type * 1000;
+    uint32_t dshot_tick_freq = ((uint32_t)dshot_bitrate) * DSHOT_BIT_LENGTH;
     return dshot_tick_freq;
 }
 
@@ -55,11 +68,12 @@ static void dshot_set_timers(dshot_type_e dshot_type) {
     uint32_t tim3_clk = TIM3_CLK;
     uint32_t tim8_clk = TIM8_CLK;
 
-    uint16_t dshot_tick_freq = get_dshot_tick_freq_hz(dshot_type);
+    uint32_t dshot_tick_freq_hz = get_dshot_tick_freq_hz(dshot_type);
 
     //consider adding 0.01 to lrintf operand for potential greater accuracy; doesn't seem necessary
-    uint16_t dshot_prescaler_tim3 = lrintf(tim3_clk / dshot_tick_freq) - 1;
-    uint16_t dshot_prescaler_tim8 = lrintf(tim8_clk / dshot_tick_freq) - 1; 
+    //prescaler register is 0-indexed, so need to subtract 1 for accurate prescaler value
+    uint16_t dshot_prescaler_tim3 = lrintf((float) tim3_clk / dshot_tick_freq_hz) - 1;
+    uint16_t dshot_prescaler_tim8 = lrintf((float) tim8_clk / dshot_tick_freq_hz) - 1; 
 
     //set Prescaler
     __HAL_TIM_SET_PRESCALER(MOTOR_1_TIM, dshot_prescaler_tim3);
@@ -102,7 +116,9 @@ static void dshot_prepare_dma(uint32_t* motor_dma_buf, const uint16_t* motor_com
     // not cleanest, but proud of coming up with this myself so keep it
     for (int i = 0; i < 16; i++) {
         motor_dma_buf[15 - i] = (packet & (1 << i)) ? (DSHOT_T1H_TICKS) : DSHOT_T0H_TICKS;
-        packet <<= 1;
+        //packet <<= 1;
+        motor_dma_buf[16] = 0;
+        motor_dma_buf[17] = 0;
     }
 
     // stm32_hal_dshot repo sets 17th and 18th items in array to zero to add a delay; skip because my pid loop will slow
@@ -117,8 +133,64 @@ static void dshot_prepare_dma_all(const uint16_t* motor_throttles) {
 }
 
 static void dshot_start_dma(void) {
-    HAL_DMA_Start_IT(MOTOR_1_TIM->hdma[TIM_DMA_ID_CC1], (uint32_t) motor_1_dma_buf, (uint32_t) MOTOR_1_TIM->Instance->CCR1, DSHOT_DMA_BUFFER_SIZE);
-    HAL_DMA_Start_IT(MOTOR_2_TIM->hdma[TIM_DMA_ID_CC2], (uint32_t) motor_2_dma_buf, (uint32_t) MOTOR_2_TIM->Instance->CCR2, DSHOT_DMA_BUFFER_SIZE);
-    HAL_DMA_Start_IT(MOTOR_3_TIM->hdma[TIM_DMA_ID_CC1], (uint32_t) motor_3_dma_buf, (uint32_t) MOTOR_3_TIM->Instance->CCR1, DSHOT_DMA_BUFFER_SIZE);
-    HAL_DMA_Start_IT(MOTOR_4_TIM->hdma[TIM_DMA_ID_CC2], (uint32_t) motor_4_dma_buf, (uint32_t) MOTOR_4_TIM->Instance->CCR2, DSHOT_DMA_BUFFER_SIZE);
+    HAL_StatusTypeDef status;
+    status = HAL_DMA_Start_IT(MOTOR_1_TIM->hdma[TIM_DMA_ID_CC1], (uint32_t) motor_1_dma_buf, (uint32_t) &MOTOR_1_TIM->Instance->CCR1, DSHOT_DMA_BUFFER_SIZE);
+    if (status != HAL_OK) {
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
+        while(1);
+    }
+    status = HAL_DMA_Start_IT(MOTOR_2_TIM->hdma[TIM_DMA_ID_CC2], (uint32_t) motor_2_dma_buf, (uint32_t) &MOTOR_2_TIM->Instance->CCR2, DSHOT_DMA_BUFFER_SIZE);
+        if (status != HAL_OK) {
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
+        while(1);
+    }
+    status = HAL_DMA_Start_IT(MOTOR_3_TIM->hdma[TIM_DMA_ID_CC1], (uint32_t) motor_3_dma_buf, (uint32_t) &MOTOR_3_TIM->Instance->CCR1, DSHOT_DMA_BUFFER_SIZE);
+        if (status != HAL_OK) {
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
+        while(1);
+    }
+    status = HAL_DMA_Start_IT(MOTOR_4_TIM->hdma[TIM_DMA_ID_CC2], (uint32_t) motor_4_dma_buf, (uint32_t) &MOTOR_4_TIM->Instance->CCR2, DSHOT_DMA_BUFFER_SIZE);
+    if (status != HAL_OK) {
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
+        while(1);
+    }
+}
+
+
+static void dshot_enable_dma_request(void) {
+	__HAL_TIM_ENABLE_DMA(MOTOR_1_TIM, TIM_DMA_CC1);
+	__HAL_TIM_ENABLE_DMA(MOTOR_2_TIM, TIM_DMA_CC2);
+	__HAL_TIM_ENABLE_DMA(MOTOR_3_TIM, TIM_DMA_CC1);
+	__HAL_TIM_ENABLE_DMA(MOTOR_4_TIM, TIM_DMA_CC2);
+}
+
+
+static void dshot_dma_tc_callback(DMA_HandleTypeDef *hdma) {
+	TIM_HandleTypeDef *htim = (TIM_HandleTypeDef *)((DMA_HandleTypeDef *)hdma)->Parent;
+
+	if (hdma == htim->hdma[TIM_DMA_ID_CC1])
+	{
+		__HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC1);
+	}
+	else if(hdma == htim->hdma[TIM_DMA_ID_CC2])
+	{
+		__HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC2);
+	}
+	else if(hdma == htim->hdma[TIM_DMA_ID_CC3])
+	{
+		__HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC3);
+	}
+	else if(hdma == htim->hdma[TIM_DMA_ID_CC4])
+	{
+		__HAL_TIM_DISABLE_DMA(htim, TIM_DMA_CC4);
+	}
+}
+
+
+static void dshot_put_tc_callback_function(void) {
+	// TIM_DMA_ID_CCx depends on timer channel
+	MOTOR_1_TIM->hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dshot_dma_tc_callback;
+	MOTOR_2_TIM->hdma[TIM_DMA_ID_CC2]->XferCpltCallback = dshot_dma_tc_callback;
+	MOTOR_3_TIM->hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dshot_dma_tc_callback;
+	MOTOR_4_TIM->hdma[TIM_DMA_ID_CC2]->XferCpltCallback = dshot_dma_tc_callback;
 }

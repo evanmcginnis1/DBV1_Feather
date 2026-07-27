@@ -20,31 +20,31 @@
 #define TIM8_CLK 168000000
 
 #define MOTOR_1_TIM  (&htim3)
-#define MOTOR_1_TIM_CHANNEL 1
+#define MOTOR_1_TIM_CHANNEL TIM_CHANNEL_1
 #define MOTOR_1_DMA()
 
 #define MOTOR_2_TIM (&htim3)
-#define MOTOR_2_TIM_CHANNEL 2
+#define MOTOR_2_TIM_CHANNEL TIM_CHANNEL_2
 
 #define MOTOR_3_TIM (&htim8)
-#define MOTOR_3_TIM_CHANNEL 1
+#define MOTOR_3_TIM_CHANNEL TIM_CHANNEL_1
 
 #define MOTOR_4_TIM (&htim8)
-#define MOTOR_4_TIM_CHANNEL 2
+#define MOTOR_4_TIM_CHANNEL TIM_CHANNEL_2
 
 #define DSHOT_BIT_LENGTH 140 //ticks per bit
 #define DSHOT_T1H_TICKS 105
 #define DSHOT_T0H_TICKS 53
 
-#define DSHOT_DMA_BUFFER_SIZE 16
+#define DSHOT_DMA_BUFFER_SIZE 18
 
 #define MHZ_TO_HZ(MHZ) ((MHZ) * 1000000)
 
 // enum is based on baud rate of each type of DShot signal.
 typedef enum {
-    DSHOT150 = 150000,
-    DSHOT300 = 300000,
-    DSHOT600 = 600000,
+    DSHOT150 = 150,
+    DSHOT300 = 300,
+    DSHOT600 = 600,
 } dshot_type_e;
 
 /*
