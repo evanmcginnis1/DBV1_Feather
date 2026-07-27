@@ -16,21 +16,21 @@
 #include "tim.h"
 
 // TIM1 is on slower APB1 bus, while TIM8 is on faster APB2 bus.
-#define TIM1_CLK 48000000
+#define TIM3_CLK 84000000
+#define TIM8_CLK 168000000
 
-
-#define MOTOR_1_TIM  (&htim1)
+#define MOTOR_1_TIM  (&htim3)
 #define MOTOR_1_TIM_CHANNEL TIM_CHANNEL_1
 #define MOTOR_1_DMA()
 
-#define MOTOR_2_TIM (&htim1)
+#define MOTOR_2_TIM (&htim3)
 #define MOTOR_2_TIM_CHANNEL TIM_CHANNEL_2
 
-#define MOTOR_3_TIM (&htim1)
-#define MOTOR_3_TIM_CHANNEL TIM_CHANNEL_3
+#define MOTOR_3_TIM (&htim8)
+#define MOTOR_3_TIM_CHANNEL TIM_CHANNEL_1
 
-#define MOTOR_4_TIM (&htim1)
-#define MOTOR_4_TIM_CHANNEL TIM_CHANNEL_4
+#define MOTOR_4_TIM (&htim8)
+#define MOTOR_4_TIM_CHANNEL TIM_CHANNEL_2
 
 #define DSHOT_BIT_LENGTH 140 //ticks per bit
 #define DSHOT_T1H_TICKS 105
