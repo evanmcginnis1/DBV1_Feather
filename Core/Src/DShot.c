@@ -37,7 +37,14 @@ static void dshot_enable_dma_request(void);
 static void dshot_put_tc_callback_function(void);
 static void dshot_dma_tc_callback(DMA_HandleTypeDef *hdma);
 
+void dshot_write_from_percents(const uint16_t* motor_throttles_pcts) {
+    uint16_t motor_throttles_raw[4];
 
+    for (int i = 0; i < 4; i++) {
+        motor_throttles_raw[i] = ((motor_throttles_pcts[i] * PCT_TO_DSHOT_RATIO) + DSHOT_OFFSET);
+    }
+    dshot_write_raw(motor_throttles_raw);
+}
 
 void dshot_init(dshot_type_e dshot_type) {
     dshot_set_timers(dshot_type);
@@ -46,13 +53,10 @@ void dshot_init(dshot_type_e dshot_type) {
 }
 
 // test if prescaler settings are correct
-void dshot_write(const uint16_t* motor_throttles) {
-    //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
-    //motor_1_dma_buf[0] = 0b11111111;
+void dshot_write_raw(const uint16_t* motor_throttles) {
     dshot_prepare_dma_all(motor_throttles);
     dshot_start_dma();
     dshot_enable_dma_request();
-    //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
 }
 
 //tick frequency = bit rate (same as baud rate) * tick length
@@ -117,9 +121,9 @@ static void dshot_prepare_dma(uint32_t* motor_dma_buf, const uint16_t* motor_com
     for (int i = 0; i < 16; i++) {
         motor_dma_buf[15 - i] = (packet & (1 << i)) ? (DSHOT_T1H_TICKS) : DSHOT_T0H_TICKS;
         //packet <<= 1;
+    }
         motor_dma_buf[16] = 0;
         motor_dma_buf[17] = 0;
-    }
 
     // stm32_hal_dshot repo sets 17th and 18th items in array to zero to add a delay; skip because my pid loop will slow
     // dshot down enough that manually inserting a delay is pointless
@@ -133,27 +137,10 @@ static void dshot_prepare_dma_all(const uint16_t* motor_throttles) {
 }
 
 static void dshot_start_dma(void) {
-    HAL_StatusTypeDef status;
-    status = HAL_DMA_Start_IT(MOTOR_1_TIM->hdma[TIM_DMA_ID_CC1], (uint32_t) motor_1_dma_buf, (uint32_t) &MOTOR_1_TIM->Instance->CCR1, DSHOT_DMA_BUFFER_SIZE);
-    if (status != HAL_OK) {
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
-        while(1);
-    }
-    status = HAL_DMA_Start_IT(MOTOR_2_TIM->hdma[TIM_DMA_ID_CC2], (uint32_t) motor_2_dma_buf, (uint32_t) &MOTOR_2_TIM->Instance->CCR2, DSHOT_DMA_BUFFER_SIZE);
-        if (status != HAL_OK) {
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
-        while(1);
-    }
-    status = HAL_DMA_Start_IT(MOTOR_3_TIM->hdma[TIM_DMA_ID_CC1], (uint32_t) motor_3_dma_buf, (uint32_t) &MOTOR_3_TIM->Instance->CCR1, DSHOT_DMA_BUFFER_SIZE);
-        if (status != HAL_OK) {
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
-        while(1);
-    }
-    status = HAL_DMA_Start_IT(MOTOR_4_TIM->hdma[TIM_DMA_ID_CC2], (uint32_t) motor_4_dma_buf, (uint32_t) &MOTOR_4_TIM->Instance->CCR2, DSHOT_DMA_BUFFER_SIZE);
-    if (status != HAL_OK) {
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
-        while(1);
-    }
+    HAL_DMA_Start_IT(MOTOR_1_TIM->hdma[TIM_DMA_ID_CC1], (uint32_t) motor_1_dma_buf, (uint32_t) &MOTOR_1_TIM->Instance->CCR1, DSHOT_DMA_BUFFER_SIZE);
+    HAL_DMA_Start_IT(MOTOR_2_TIM->hdma[TIM_DMA_ID_CC2], (uint32_t) motor_2_dma_buf, (uint32_t) &MOTOR_2_TIM->Instance->CCR2, DSHOT_DMA_BUFFER_SIZE);
+    HAL_DMA_Start_IT(MOTOR_3_TIM->hdma[TIM_DMA_ID_CC1], (uint32_t) motor_3_dma_buf, (uint32_t) &MOTOR_3_TIM->Instance->CCR1, DSHOT_DMA_BUFFER_SIZE);
+    HAL_DMA_Start_IT(MOTOR_4_TIM->hdma[TIM_DMA_ID_CC2], (uint32_t) motor_4_dma_buf, (uint32_t) &MOTOR_4_TIM->Instance->CCR2, DSHOT_DMA_BUFFER_SIZE);
 }
 
 
