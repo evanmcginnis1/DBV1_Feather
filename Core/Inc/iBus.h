@@ -46,7 +46,7 @@ bool ibus_read(uint16_t* ibus_data);
  * Modifies: 
  * Effects: 
  */
-void ibus_failsafe_check();
+void ibus_failsafe_check(uint16_t* ibus_data);
 
 /*
  * Requires: 
