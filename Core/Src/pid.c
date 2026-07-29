@@ -19,10 +19,43 @@ static PID_t pid_yaw_info;
 static Pid_Output_t pid_axis_out_pct;
 
 // Static Functions
-static void pid_step(PID_t* pid_info, const float* actual_val, const float* setpoint, float* output);
+/*
+Requires: pid_info is the specific PID_t object for the chosen axis. actual_val is the quadcopters current state, 
+          based on the imu. setpoint is a pointer to the member in the setpoints array representing the chosen axis. 
+          output is the pid output for that axis
+Modifies: updates prev_error term in given pid_info object with new error. updates output variable
+Effects: calculates error, integrated error, and the rate of change of the error. Then, multiplies these with their 
+         respective gain values and sums them. 
+*/
+static void pid_step(PID_t* pid_info, const float* actual_val, const float* setpoint, uint16_t* output);
+/*
+Requires: imu has been updated with data from the imu. setpoint is an array of values representing degrees for pitch and
+          roll and degrees per second for yaw.
+Modifies: setpoint array
+Effects: Calls pid_step for each axis. 
+*/
 static void pid_step_all(const IMU_Model_t* imu, const float* setpoint);
-static void synthesize_pid_commands(const float* throttle_command, float* esc_commands_pct);
+/*
+Requires: throttle_command is an integer value between 0 and 1000 representing the pilot's throttle input. 
+          esc_commands_pct is an array holding values to be passed to the esc
+Modifies: updates esc_commands_pct array
+Effects:  converts axis & throttle commands into individual motor commands. Calls check_integrator function
+*/
+static void synthesize_pid_commands(const float* throttle_command, uint16_t* esc_commands_pct);
+/*
+Requires: pilot_command is an array of four values between 0 and 1000
+Modifies: setpoint array
+Effects: converts pilot pitch, roll command into degrees, yaw into dps, throttle stays the same
+*/
 static void pilot_command_to_setpoint(const uint16_t* pilot_command, float* setpoint);
+
+/*
+Requires: esc_commands_pct is a signed value generated from synthesizing the pid commands into motor commands
+Modifies: resets pid_info.accumulated_error variable if it is pushing the motor command value further past its limit. 
+Effects:  Checks if esc command is greater than limit or less than minimum. If so, resets accumulated error terms that 
+          are pushing further past limit in order to prevent integrator windup. 
+*/
+static void check_integrator(int16_t* esc_commands_pct);
 
 void pid_init(void) {
     pid_roll_info.accumulated_error = 0;
@@ -48,7 +81,7 @@ void pid_init(void) {
 https://timhanewich.medium.com/how-i-developed-the-scout-flight-controller-part-1-quadcopter-flight-dynamics-400af73d21db
 */
 
-void pid_update(const IMU_Model_t *imu, const uint16_t *pilot_command, float *esc_commands_pct) {
+void pid_update(const IMU_Model_t* imu, const uint16_t* pilot_command, uint16_t* esc_commands_pct) {
     float setpoint[4];
 
     pilot_command_to_setpoint(pilot_command, setpoint);
@@ -72,20 +105,16 @@ static void pid_step_all(const IMU_Model_t* imu, const float* setpoint) {
     return;
 }
 
-//KP, KI, KD should be sized so that the output is a float between 0 and 1.0
-static void pid_step(PID_t* pid_info, const float* actual_val, const float* setpoint, float* output) {
+//KP, KI, KD should be sized so that the output is an integer between 0 and 1000
+static void pid_step(PID_t* pid_info, const float* actual_val, const float* setpoint, uint16_t* output) {
     float error = *setpoint - *actual_val;
 
     float p = error * pid_info->kp;
     float i = (pid_info->accumulated_error + (error * (1.0  / PID_LOOP_RATE_HZ))) * pid_info->ki;
     float d = ((error - pid_info->prev_error) * PID_LOOP_RATE_HZ) * pid_info->kd;
 
-    *output = p + i + d;
-
-    // stop increading integral term if axis signal is already maxed out
-    if (((p + i + d) < 1) && ((p + i + d) > 0)) {
-        pid_info->accumulated_error += (error * (1.0 / PID_LOOP_RATE_HZ));
-    }
+    *output = lrintf(p + i + d);
+    
     pid_info->prev_error = error;
 }
 
@@ -95,50 +124,146 @@ static void pid_step(PID_t* pid_info, const float* actual_val, const float* setp
 //setpoint[1] = pitch
 //setpoint[2] = throttle
 //setpoint[3] = yaw
+
+/*
+Requires: pilot_command is an array of input values in percent form, each between 0 and 1000
+Modifies: setpoint array
+Effects: Converts pilot_command percentages into degrees (0-180) and leaves throttle value between 0-1000
+*/
 static void pilot_command_to_setpoint(const uint16_t* pilot_command, float* setpoint) {
     //axis commands
 
-    setpoint[0] = (pilot_command[0] - 1500) / (10.0f);
-    setpoint[1] = (pilot_command[1] - 1500) / (10.0f);
-    setpoint[3] = (pilot_command[3] - 1500) / (10.0f);
+    //roll
+    setpoint[0] = (pilot_command[0] / 1000.0f) * 180;
+    //pitch
+    setpoint[1] = (pilot_command[1] / 1000.0f) * 180;
+    //yaw
+    setpoint[3] = (pilot_command[3] / 1000.0f) * 180;
 
     //throttle command normalized to a value between 0 and 1
-    setpoint[2] = (pilot_command[2] - 1000) / 1000.0;
+    setpoint[2] = pilot_command[2];
 }
 
 
 //TODO: figure out how to handle idle speed, prevent outputting a negative number, prevent esc signal on zero throttle
-static void synthesize_pid_commands(const float* throttle_command_pct, float* esc_command_pct) {
+static void synthesize_pid_commands(const float* throttle_command_pct, uint16_t* esc_command_pct) {
     //synthesize commands
     //esc_command index corresponds to motor index on quadcopter
-    esc_command_pct[0] = *throttle_command_pct + pid_axis_out_pct.roll_pct + pid_axis_out_pct.pitch_pct - pid_axis_out_pct.yaw_pct;
-    esc_command_pct[1] = *throttle_command_pct + pid_axis_out_pct.roll_pct - pid_axis_out_pct.pitch_pct + pid_axis_out_pct.yaw_pct;
-    esc_command_pct[2] = *throttle_command_pct - pid_axis_out_pct.roll_pct + pid_axis_out_pct.pitch_pct + pid_axis_out_pct.yaw_pct;
-    esc_command_pct[3] = *throttle_command_pct - pid_axis_out_pct.roll_pct - pid_axis_out_pct.pitch_pct - pid_axis_out_pct.yaw_pct;
+    int16_t signed_commands[4];
 
-    if (esc_command_pct[0] > 1) {
-        esc_command_pct[0] = 1;
-    }
-    if (esc_command_pct[1] > 1) {
-        esc_command_pct[1] = 1;
-    }
-    if (esc_command_pct[2] > 1) {
-        esc_command_pct[2] = 1;
-    }
-    if (esc_command_pct[3] > 1) {
-        esc_command_pct[3] = 1;
+    signed_commands[0] = *throttle_command_pct + pid_axis_out_pct.roll_pct + pid_axis_out_pct.pitch_pct - pid_axis_out_pct.yaw_pct;
+    signed_commands[1] = *throttle_command_pct + pid_axis_out_pct.roll_pct - pid_axis_out_pct.pitch_pct + pid_axis_out_pct.yaw_pct;
+    signed_commands[2] = *throttle_command_pct - pid_axis_out_pct.roll_pct + pid_axis_out_pct.pitch_pct + pid_axis_out_pct.yaw_pct;
+    signed_commands[3] = *throttle_command_pct - pid_axis_out_pct.roll_pct - pid_axis_out_pct.pitch_pct - pid_axis_out_pct.yaw_pct;
+
+    check_integrator(signed_commands);
+
+    //ensure valid output
+    for (int i = 0; i < 4; i++) {
+        if (signed_commands[i] > 1000) {
+            signed_commands[i] = 1000;
+        }
+        if (signed_commands[i] < 0) {
+            signed_commands[i] = 0;
+        }
     }
 
-    if (esc_command_pct[0] < 0) {
-        esc_command_pct[0] = 0;
+    esc_command_pct[0] = (uint16_t) signed_commands[0];
+    esc_command_pct[1] = (uint16_t) signed_commands[1];
+    esc_command_pct[2] = (uint16_t) signed_commands[2];
+    esc_command_pct[3] = (uint16_t) signed_commands[3];
+}
+
+//lots of conditionals, but majority of them are nested and will not be called regularly. 
+static void check_integrator(int16_t* esc_commands_pct) {
+    if (esc_commands_pct[0] > 1000) {
+        if (pid_roll_info.accumulated_error > 0) {
+            pid_roll_info.accumulated_error = 0;
+        }
+        if (pid_pitch_info.accumulated_error > 0) {
+            pid_pitch_info.accumulated_error = 0;
+        }
+
+        if (pid_yaw_info.accumulated_error < 0) {
+            pid_yaw_info.accumulated_error = 0;
+        }
+
+    } else if (esc_commands_pct[0] < 0) {
+        if (pid_yaw_info.accumulated_error > 0) {
+            pid_yaw_info.accumulated_error = 0;
+        }
+        if (pid_roll_info.accumulated_error < 0) {
+            pid_roll_info.accumulated_error = 0;
+        }
+        if (pid_pitch_info.accumulated_error < 0) {
+            pid_pitch_info.accumulated_error = 0;
+        }
     }
-    if (esc_command_pct[1] < 0) {
-        esc_command_pct[1] = 0;
+
+    if (esc_commands_pct[1] > 1000) {
+        if (pid_roll_info.accumulated_error > 0) {
+            pid_roll_info.accumulated_error = 0;
+        }
+        if (pid_yaw_info.accumulated_error > 0) {
+            pid_yaw_info.accumulated_error = 0;
+        }
+        if (pid_pitch_info.accumulated_error < 0) {
+            pid_pitch_info.accumulated_error = 0;
+        }
+    } else if (esc_commands_pct[1] < 0) {
+        if (pid_pitch_info.accumulated_error > 0) {
+            pid_pitch_info.accumulated_error = 0;
+        }
+        if (pid_roll_info.accumulated_error < 0) {
+            pid_roll_info.accumulated_error = 0;
+        }
+        if (pid_yaw_info.accumulated_error < 0) {
+            pid_yaw_info.accumulated_error = 0;
+        }
     }
-    if (esc_command_pct[2] < 0) {
-        esc_command_pct[2] = 0;
+
+    if (esc_commands_pct[2] > 1000) {
+        if (pid_pitch_info.accumulated_error > 0) {
+            pid_pitch_info.accumulated_error = 0;
+        }
+        if (pid_yaw_info.accumulated_error > 0) {
+            pid_yaw_info.accumulated_error = 0;
+        }
+        if (pid_roll_info.accumulated_error < 0) {
+            pid_roll_info.accumulated_error = 0;
+        }
+    } else if (esc_commands_pct[2] < 0) {
+        if (pid_roll_info.accumulated_error > 0) {
+            pid_roll_info.accumulated_error = 0;
+        }
+        if (pid_pitch_info.accumulated_error < 0) {
+            pid_pitch_info.accumulated_error = 0;
+        }
+        if (pid_yaw_info.accumulated_error < 0) {
+            pid_yaw_info.accumulated_error = 0;
+        }
     }
-    if (esc_command_pct[3] < 0) {
-        esc_command_pct[3] = 0;
+
+    if (esc_commands_pct[3] > 1000) {
+        if (pid_pitch_info.accumulated_error < 0) {
+            pid_pitch_info.accumulated_error = 0;
+        }
+        if (pid_yaw_info.accumulated_error < 0) {
+            pid_yaw_info.accumulated_error = 0;
+        }
+        if (pid_roll_info.accumulated_error > 0) {
+            pid_roll_info.accumulated_error = 0;
+        }
+    } 
+    else if (esc_commands_pct[3] < 0) {
+        if (pid_pitch_info.accumulated_error > 0) {
+            pid_pitch_info.accumulated_error = 0;
+        }
+        if (pid_yaw_info.accumulated_error > 0) {
+            pid_yaw_info.accumulated_error = 0;
+        }
+        if (pid_roll_info.accumulated_error > 0) {
+            pid_roll_info.accumulated_error = 0;
+        }
     }
 }
