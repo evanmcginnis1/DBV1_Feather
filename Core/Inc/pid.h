@@ -49,7 +49,13 @@ typedef struct {
 
 // struct implemented for better code clarity
 
-//initializes 
+/* 
+Requires: Nothing
+Modifies: pid_x_info structs, where x is pitch, roll, yaw
+Effects: Initializes pid info structs for each axis using defined gain constants. Sets accumulated error and previous 
+         error terms to zero. 
+*/
+
 void pid_init(void);
 
 /*
