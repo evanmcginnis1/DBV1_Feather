@@ -81,6 +81,14 @@ void pid_init(void) {
 https://timhanewich.medium.com/how-i-developed-the-scout-flight-controller-part-1-quadcopter-flight-dynamics-400af73d21db
 */
 
+/**
+ * @brief Updates runs pid loop one time based on pilot commands and imu data
+ * 
+ * @param imu IMU data
+ * @param pilot_command Pilot control input.
+ * @param esc_commands_pct Array to store output
+ *
+*/
 void pid_update(const IMU_Model_t* imu, const uint16_t* pilot_command, uint16_t* esc_commands_pct) {
     float setpoint[4];
 
@@ -108,13 +116,15 @@ static void pid_step_all(const IMU_Model_t* imu, const float* setpoint) {
 //KP, KI, KD should be sized so that the output is an integer between 0 and 1000
 static void pid_step(PID_t* pid_info, const float* actual_val, const float* setpoint, uint16_t* output) {
     float error = *setpoint - *actual_val;
+    //new_accum_error is part of static struct so that integral clamp can be applied in separate function
+    pid_info->new_accum_error = error * (1.0  / PID_LOOP_RATE_HZ);
 
     float p = error * pid_info->kp;
-    float i = (pid_info->accumulated_error + (error * (1.0  / PID_LOOP_RATE_HZ))) * pid_info->ki;
+    float i = (pid_info->accumulated_error + pid_info->new_accum_error) * pid_info->ki;
     float d = ((error - pid_info->prev_error) * PID_LOOP_RATE_HZ) * pid_info->kd;
 
     *output = lrintf(p + i + d);
-    
+
     pid_info->prev_error = error;
 }
 
@@ -178,92 +188,92 @@ static void synthesize_pid_commands(const float* throttle_command_pct, uint16_t*
 static void check_integrator(int16_t* esc_commands_pct) {
     if (esc_commands_pct[0] > 1000) {
         if (pid_roll_info.accumulated_error > 0) {
-            pid_roll_info.accumulated_error = 0;
+            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
         }
         if (pid_pitch_info.accumulated_error > 0) {
-            pid_pitch_info.accumulated_error = 0;
+            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
         }
 
         if (pid_yaw_info.accumulated_error < 0) {
-            pid_yaw_info.accumulated_error = 0;
+            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
         }
 
     } else if (esc_commands_pct[0] < 0) {
         if (pid_yaw_info.accumulated_error > 0) {
-            pid_yaw_info.accumulated_error = 0;
+            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
         }
         if (pid_roll_info.accumulated_error < 0) {
-            pid_roll_info.accumulated_error = 0;
+            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
         }
         if (pid_pitch_info.accumulated_error < 0) {
-            pid_pitch_info.accumulated_error = 0;
+            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
         }
     }
 
     if (esc_commands_pct[1] > 1000) {
         if (pid_roll_info.accumulated_error > 0) {
-            pid_roll_info.accumulated_error = 0;
+            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
         }
         if (pid_yaw_info.accumulated_error > 0) {
-            pid_yaw_info.accumulated_error = 0;
+            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
         }
         if (pid_pitch_info.accumulated_error < 0) {
-            pid_pitch_info.accumulated_error = 0;
+            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
         }
     } else if (esc_commands_pct[1] < 0) {
         if (pid_pitch_info.accumulated_error > 0) {
-            pid_pitch_info.accumulated_error = 0;
+            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
         }
         if (pid_roll_info.accumulated_error < 0) {
-            pid_roll_info.accumulated_error = 0;
+            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
         }
         if (pid_yaw_info.accumulated_error < 0) {
-            pid_yaw_info.accumulated_error = 0;
+            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
         }
     }
 
     if (esc_commands_pct[2] > 1000) {
         if (pid_pitch_info.accumulated_error > 0) {
-            pid_pitch_info.accumulated_error = 0;
+            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
         }
         if (pid_yaw_info.accumulated_error > 0) {
-            pid_yaw_info.accumulated_error = 0;
+            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
         }
         if (pid_roll_info.accumulated_error < 0) {
-            pid_roll_info.accumulated_error = 0;
+            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
         }
     } else if (esc_commands_pct[2] < 0) {
         if (pid_roll_info.accumulated_error > 0) {
-            pid_roll_info.accumulated_error = 0;
+            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
         }
         if (pid_pitch_info.accumulated_error < 0) {
-            pid_pitch_info.accumulated_error = 0;
+            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
         }
         if (pid_yaw_info.accumulated_error < 0) {
-            pid_yaw_info.accumulated_error = 0;
+            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
         }
     }
 
     if (esc_commands_pct[3] > 1000) {
         if (pid_pitch_info.accumulated_error < 0) {
-            pid_pitch_info.accumulated_error = 0;
+            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
         }
         if (pid_yaw_info.accumulated_error < 0) {
-            pid_yaw_info.accumulated_error = 0;
+            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
         }
         if (pid_roll_info.accumulated_error > 0) {
-            pid_roll_info.accumulated_error = 0;
+            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
         }
     } 
     else if (esc_commands_pct[3] < 0) {
         if (pid_pitch_info.accumulated_error > 0) {
-            pid_pitch_info.accumulated_error = 0;
+            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
         }
         if (pid_yaw_info.accumulated_error > 0) {
-            pid_yaw_info.accumulated_error = 0;
+            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
         }
         if (pid_roll_info.accumulated_error > 0) {
-            pid_roll_info.accumulated_error = 0;
+            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
         }
     }
 }

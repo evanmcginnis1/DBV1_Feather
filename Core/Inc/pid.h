@@ -37,6 +37,7 @@ typedef struct {
     float kp;
     float ki;
     float kd;
+    float new_accum_error;
     float accumulated_error;
     float prev_error;
 } PID_t;
