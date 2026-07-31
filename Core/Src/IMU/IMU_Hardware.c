@@ -217,6 +217,10 @@ HAL_StatusTypeDef set_IMU_mag_config(IMU_MagConfig_t* mag_config) {
 	return status;
 }
 
+//TODO: Implement
+HAL_StatusTypeDef IMU_remap_axes(void) {
+	return HAL_OK;
+}
 /*************************************************
 *              Sensor Calibration                *
 **************************************************/
@@ -254,7 +258,7 @@ HAL_StatusTypeDef IMU_set_calibration_profile(void) {
 *           Sensor Data Functions                *
 **************************************************/
 //read all of the euler angle registers into a buffer, then extract them from the buffer to convert into true values
-HAL_StatusTypeDef get_IMU_euler_data(float* EUL_heading, float* EUL_roll, float* EUL_pitch) {
+HAL_StatusTypeDef IMU_get_euler_data(float* EUL_heading, float* EUL_roll, float* EUL_pitch) {
 	HAL_StatusTypeDef status;
 	uint8_t euler_data[6];
 	// read all registers at once for speed
@@ -275,7 +279,7 @@ HAL_StatusTypeDef get_IMU_euler_data(float* EUL_heading, float* EUL_roll, float*
 	return status;
  }
 
-HAL_StatusTypeDef get_IMU_quat_data(float* QUAT_w, float* QUAT_x, float* QUAT_y, float* QUAT_z) {
+HAL_StatusTypeDef IMU_get_quat_data(float* QUAT_w, float* QUAT_x, float* QUAT_y, float* QUAT_z) {
 	HAL_StatusTypeDef status;
 	uint8_t quat_data[8];
 
@@ -298,7 +302,7 @@ HAL_StatusTypeDef get_IMU_quat_data(float* QUAT_w, float* QUAT_x, float* QUAT_y,
 	return status;
 }
 
-HAL_StatusTypeDef get_IMU_gyro_rawdata(float *pitch, float *roll, float *yaw) {
+HAL_StatusTypeDef IMU_get_gyro_rawdata(float *pitch, float *roll, float *yaw) {
 	HAL_StatusTypeDef status;
 	uint8_t gyr_data[6];
 	status = read_IMU_register(IMU_REG_GYR_DATA_X_LSB, gyr_data, 6);
@@ -317,7 +321,7 @@ HAL_StatusTypeDef get_IMU_gyro_rawdata(float *pitch, float *roll, float *yaw) {
 	return status;
 }
 
-HAL_StatusTypeDef get_IMU_accel_rawdata(float* accel_x, float* accel_y, float* accel_z) {
+HAL_StatusTypeDef IMU_get_accel_rawdata(float* accel_x, float* accel_y, float* accel_z) {
 	HAL_StatusTypeDef status;
 	uint8_t accel_rawdata[6];
 
@@ -338,7 +342,7 @@ HAL_StatusTypeDef get_IMU_accel_rawdata(float* accel_x, float* accel_y, float* a
 	return status;
 }
 
-HAL_StatusTypeDef get_IMU_grav_data(float* grav_x, float* grav_y, float* grav_z) {
+HAL_StatusTypeDef IMU_get_grav_data(float* grav_x, float* grav_y, float* grav_z) {
 	HAL_StatusTypeDef status;
 	uint8_t grav_rawdata[6];
 
@@ -358,7 +362,7 @@ HAL_StatusTypeDef get_IMU_grav_data(float* grav_x, float* grav_y, float* grav_z)
 	return status;
 }
 
-HAL_StatusTypeDef get_IMU_lin_accel_data(float* linaccel_x, float* linaccel_y, float* linaccel_z) {
+HAL_StatusTypeDef IMU_get_lin_accel_data(float* linaccel_x, float* linaccel_y, float* linaccel_z) {
 	HAL_StatusTypeDef status;
 	uint8_t linaccel_rawdata[6];
 
@@ -378,7 +382,7 @@ HAL_StatusTypeDef get_IMU_lin_accel_data(float* linaccel_x, float* linaccel_y, f
 	return status;
 }
 
-HAL_StatusTypeDef get_IMU_chipID(uint8_t* chipID) {
+HAL_StatusTypeDef IMU_get_chipID(uint8_t* chipID) {
 	HAL_StatusTypeDef status;
 	status = read_IMU_register(IMU_REG_CHIP_ID, chipID,1);
 	if (status != HAL_OK) {
