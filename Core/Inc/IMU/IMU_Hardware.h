@@ -3,10 +3,11 @@
  *
  *  Created on: May 13, 2026
  *      Author: Evan McGinnis
- *      Low-level code to directly modify registers on BNO055 IMU
+ *      Low-level code to directly modify registers on BNO055 IMU. Doesn't use static functions to enable easier testing
  */
 
- //TODO: add IMU self-test function
+ //TODO: add IMU self-test function??
+ //
 #ifndef IMU_HARDWARE_H_
 #define IMU_HARDWARE_H_
 
@@ -26,6 +27,7 @@
 //addr is 0x28 if COM3 pulled low
 // if COM3 pulled high, addr is 0x29
 #define IMU_I2C_ADDR          0x28
+//why shift?
 #define IMU_I2C_ADDR_SHIFTED      ((IMU_I2C_ADDR) << 1)
 
 /*************************************************
@@ -67,20 +69,23 @@ typedef enum {
 **************************************************/
 //accelerometer range config
 //all bits written to configure accel
-#define IMU_REG_ACC_CONFIG     0x08
+#define IMU_REG_ACC_CONFIG      0x08
 
-#define IMU_REG_MAG_CONFIG     0x09
+#define IMU_REG_MAG_CONFIG      0x09
 // preserve highest bit
-#define IMU_MAG_CONFIG_MASK    0x7F
+#define IMU_MAG_CONFIG_MASK     0x7F
 
-#define IMU_REG_GYR_CONFIG_0   0x0A 
+#define IMU_REG_GYR_CONFIG_0    0x0A 
 //preserve upper two bits
-#define IMU_GYR_CONFIG_0_MASK  0x3F
+#define IMU_GYR_CONFIG_0_MASK   0x3F
 
-#define IMU_REG_GYR_CONFIG_1   0x0B
-#define IMU_GYR_CONFIG_1_MASK  0x07
+#define IMU_REG_GYR_CONFIG_1    0x0B
+#define IMU_GYR_CONFIG_1_MASK   0x07
 
-#define IMU_REG_CALIB_STAT     0x35
+#define IMU_REG_CALIB_STAT      0x35
+
+#define IMU_REG_AXIS_MAP_CONFIG 0x41
+#define IMU_REG_AXIS_MAP_SIGN   0x42
 /*************************************************
 *             IMU Data Registers              *
 **************************************************/
@@ -485,6 +490,8 @@ HAL_StatusTypeDef set_IMU_gyro_config(IMU_GyroConfig_t* gyro_config);
 */
 HAL_StatusTypeDef set_IMU_mag_config(IMU_MagConfig_t* mag_config);
 
+HAL_StatusTypeDef IMU_remap_axes(void);
+
 /*************************************************
 *              Sensor Calibration                *
 **************************************************/
@@ -501,42 +508,42 @@ HAL_StatusTypeDef IMU_set_calibration_profile(void);
 * Modifies: QUAT_w, QUAT_x, QUAT_y, QUAT_z
 * Effects: Reads IMU fused quaterion data
 */
-HAL_StatusTypeDef get_IMU_quat_data(float* QUAT_w, float* QUAT_x, float* QUAT_y, float* QUAT_z);
+HAL_StatusTypeDef IMU_get_quat_data(float* QUAT_w, float* QUAT_x, float* QUAT_y, float* QUAT_z);
 
 /*
 * Requires: 
 * Modifies:
 * Effects:
 */
-HAL_StatusTypeDef get_IMU_euler_data(float* EUL_heading, float* EUL_roll, float* EUL_pitch);
+HAL_StatusTypeDef IMU_get_euler_data(float* EUL_heading, float* EUL_roll, float* EUL_pitch);
 
 /*
 * Requires: 
 * Modifies:
 * Effects:
 */
-HAL_StatusTypeDef get_IMU_accel_rawdata(float* accel_x, float* accel_y, float* accel_z);
+HAL_StatusTypeDef IMU_get_accel_rawdata(float* accel_x, float* accel_y, float* accel_z);
 
 /*
 * Requires: 
 * Modifies:
 * Effects:
 */
-HAL_StatusTypeDef get_IMU_grav_data(float* grav_x, float* grav_y, float* grav_z);
+HAL_StatusTypeDef IMU_get_grav_data(float* grav_x, float* grav_y, float* grav_z);
 
 /*
 * Requires: 
 * Modifies:
 * Effects:
 */
-HAL_StatusTypeDef get_IMU_lin_accel_data(float* linaccel_x, float* linaccel_y, float* linaccel_z);
+HAL_StatusTypeDef IMU_get_lin_accel_data(float* linaccel_x, float* linaccel_y, float* linaccel_z);
 
-HAL_StatusTypeDef get_IMU_gyro_rawdata(float* pitch, float* roll, float* yaw);
+HAL_StatusTypeDef IMU_get_gyro_rawdata(float* pitch, float* roll, float* yaw);
 /*
 * Requires: 
 * Modifies:
 * Effects:
 */
-HAL_StatusTypeDef get_IMU_chipID(uint8_t* chipID);
+HAL_StatusTypeDef IMU_get_chipID(uint8_t* chipID);
 
 #endif /* SRC_IMU_HARDWARE_H_ */

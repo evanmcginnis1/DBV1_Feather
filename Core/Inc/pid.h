@@ -37,27 +37,37 @@ typedef struct {
     float kp;
     float ki;
     float kd;
+    float new_accum_error;
     float accumulated_error;
     float prev_error;
 } PID_t;
 
 typedef struct {
-    float pitch_pct;
-    float roll_pct;
-    float yaw_pct;
+    uint16_t pitch_pct;
+    uint16_t roll_pct;
+    uint16_t yaw_pct;
 } Pid_Output_t;
 
 // struct implemented for better code clarity
 
-//initializes 
+/* 
+Requires: Nothing
+Modifies: pid_x_info structs, where x is pitch, roll, yaw
+Effects: Initializes pid info structs for each axis using defined gain constants. Sets accumulated error and previous 
+         error terms to zero. 
+*/
+
 void pid_init(void);
 
 /*
-Requires: pilot commands are in TAER channel sequence. pilot commands for angle correspond to an actual angle, throttle 
-          is a number between 48 and 2048. MUST VERIFY THAT QUAD IS ARMED BEFORE CALLING THIS FUNCTION. 
+Requires: pilot commands are in TAER channel sequence. pilot command values are all percent-style integers from 0-1000 
+MUST VERIFY THAT QUAD IS ARMED BEFORE CALLING THIS FUNCTION. 
+          IMU data contains fused gyroscope data
+Modifies: esc_commands_pct array
+Effects:  Outputs four values (ranged 0-1000) into esc_commands_pct array
 */
 
-void pid_update(const IMU_Model_t* imu_data, const uint16_t* pilot_command, float* esc_commands_pct);
+void pid_update(const IMU_Model_t* imu_data, const uint16_t* pilot_command, uint16_t* esc_commands_pct);
 
 
 #endif

@@ -25,22 +25,37 @@
 #define IBUS_THROTTLE_COMMAND 0x40
 
 /*
- * Requires: UART object has been initialized. Must be called before main().
- * Modifies: 
- * Effects: points DMA to put uart data in buffer
+ * Requires: UART object has been initialized. Must be called before main(). UART DMA is set to circular mode
+ * Modifies: DMA registers, uart_buf
+ * Effects: points DMA to put uart data in buffer, starts circular transfers
  */
 void ibus_init(UART_HandleTypeDef* huart);
 
+
 /*
  * Requires: ibus_data is an array of 16-bit variables with size equal to the number of channels. 
- * idx map: 
- 1: 
  * Modifies: 
  * Effects: 
  */
 bool ibus_read(uint16_t* ibus_data);
 
+/*
+Does same thing as ibus_read, but outputs data for each channel as a number between 0 and 1000, rather than between 
+1000 and 2000
+ * Requires: new ibus data is available in buffer. 
+ * Modifies: ibus_data_percents array
+ * Effects: returns false if ibus data is invalid. returns true otherwise. Converts raw ibus data into number between 0 
+            and 1000
+*/
+bool ibus_read_as_percents(uint16_t* ibus_data_percents);
 
+/* 
+ * Requires: ibus_data has filled with ibus data in percent form
+ * Modifies: nothing
+ * Effects: checks if channel 5 of ibus transmission is low or high. If it is low, then the quadcopter is armed so
+            return true. Otherwise, return false.
+ */
+bool ibus_is_armed(const uint16_t* ibus_data_percents);
 /*
  * Requires: 
  * Modifies: 
@@ -55,9 +70,6 @@ void ibus_failsafe_check(uint16_t* ibus_data);
  */
 void ibus_reset_failsafe(void);
 
-// Does same thing as ibus_read, but outputs data for each channel as a number between 0 and 1000, rather than between 
-// 1000 and 2000
-// 
-void ibus_read_as_percents(uint16_t* ibus_data_percents);
+
 
 #endif
