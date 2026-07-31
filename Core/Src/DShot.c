@@ -26,15 +26,73 @@ static uint32_t motor_3_dma_buf[DSHOT_DMA_BUFFER_SIZE];
 static uint32_t motor_4_dma_buf[DSHOT_DMA_BUFFER_SIZE];
 
 // Static Functions
+/*
+ * Requires: dshot_type is a valid member of dshot_type_e
+ * Modifies: Nothing
+ * Effects: Converts from dshot bitrate into tick frequency, then returns the result
+*/
 static uint32_t get_dshot_tick_freq_hz(dshot_type_e dshot_type);
+
+/*
+ * Requires: dshot_type is a valid member of dshot_type_e. Timers used for dshot have already been initialized. 
+ * Modifies: Prescaler and ARR values for chosen timers
+ * Effects: Calculates prescaler value, sets prescaler and ARR value using STM32 HAL
+ */
 static void dshot_set_timers(dshot_type_e dshot_type);
+
+/*
+ * Requires: motor_command is an array of the actual throttle values (range from 48-2048) to send to the ESC
+ * Modifies: Nothing
+ * Effects: Sets telemetry bit to 0 (disabled), calculates DShot checksum & appends it to end of packet
+ */
 static uint16_t dshot_make_packet(const uint16_t* motor_command);
+/*
+ * Requires: motor_command is a complete DShot frame (in binary format, not converted to DShot protocol yet)
+ * Modifies: motor_dma_buf
+ * Effects: Converts packet into an array of capture/compare values, with each member representing one byte. 
+ */
 static void dshot_prepare_dma(uint32_t* motor_dma_buf, const uint16_t* motor_command);
+/*
+ * Requires: motor_throttles are either 0 (disarmed, zero motor spin command) or a value between 48 and 2048
+ * Modifies: All four motor buffers
+ * Effects:  Calls dshot_prepare_dma for each motor
+ */
 static void dshot_prepare_dma_all(const uint16_t* motor_throttles);
+/*
+ * Requires: Timers and DMA have all been initialized. 
+ * Modifies: DMA bus
+ * Effects: Enables DMA transaction with interrupt when complete (does not actually start transaction)
+ */
 static void dshot_start_dma(void);
+
+/*
+ * Requires: Timer(s) used for DShot signal generation have been initialized. CCR is set to zero in CubeMX
+             (to prevent any signal being actually sent)
+ * Modifies: TIMx CCx register
+ * Effects: Starts PWM on TIMx
+ */
 static void dshot_start_pwm(void);
+
+/*
+ * Requires: DMA & Timers have been initialized
+ * Modifies: TIMx channel x DMA register
+ * Effects: Makes timer start responding to DMA requests
+ */
 static void dshot_enable_dma_request(void);
+
+/*
+ * Requires: dshot_dma_tc_callback is a valid function
+ * Modifies: TIM XferCpltCallback register
+ * Effects: points XferCpltCallback member of TIMx to callback function
+ */
 static void dshot_put_tc_callback_function(void);
+
+/*
+ * Requires: hdma is a member of a TIM object on an index corresponding to a channel between 1 and 4
+ * Modifies: DMA bus
+ * Effects: Disables DMA transactions for the given timer channel
+ */
+
 static void dshot_dma_tc_callback(DMA_HandleTypeDef *hdma);
 
 void dshot_write_from_percents(const uint16_t* motor_throttles_pcts) {
@@ -62,13 +120,15 @@ void dshot_write_raw(const uint16_t* motor_throttles) {
 //tick frequency = bit rate (same as baud rate) * tick length
 static uint32_t get_dshot_tick_freq_hz(dshot_type_e dshot_type) {
     uint32_t dshot_bitrate = (uint32_t)dshot_type * 1000;
-    uint32_t dshot_tick_freq = ((uint32_t)dshot_bitrate) * DSHOT_BIT_LENGTH;
+    uint32_t dshot_tick_freq = (uint32_t)dshot_bitrate * DSHOT_BIT_LENGTH;
     return dshot_tick_freq;
 }
 
 // update so that timer prescale variables are not specific to the timers; move specific timer clock info into a #define
 static void dshot_set_timers(dshot_type_e dshot_type) {
 
+    // easier to use defined clock frequency instead of reading from stm32 clock register since timers are on different 
+    // buses. 
     uint32_t tim3_clk = TIM3_CLK;
     uint32_t tim8_clk = TIM8_CLK;
 
