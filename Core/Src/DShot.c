@@ -49,7 +49,8 @@ static uint16_t dshot_make_packet(const uint16_t* motor_command);
 /*
  * Requires: motor_command is a complete DShot frame (in binary format, not converted to DShot protocol yet)
  * Modifies: motor_dma_buf
- * Effects: Converts packet into an array of capture/compare values, with each member representing one byte. 
+ * Effects: Converts packet into an array of capture/compare values, with each member representing one byte. Sets last 
+            two members of array to zero, so that the following ARR cycles have zero output while waiting for next command.
  */
 static void dshot_prepare_dma(uint32_t* motor_dma_buf, const uint16_t* motor_command);
 /*
