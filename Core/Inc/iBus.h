@@ -17,7 +17,8 @@
 #define IBUS_UART &huart1
 #define IBUS_NUM_CHANNELS 14
 #define IBUS_FRAME_SIZE 32
-//adjust so that max delay between dead reciever and full shutdown is <0.3s
+//adjust so that max delay between dead reciever and full shutdown is 0.1s
+// counter increments up every 0.01 seconds
 #define IBUS_FAILSAFE_MAX 10
 //length of transmission is 32 bytes
 #define IBUS_LENGTH 0x20

@@ -144,6 +144,7 @@ int main(void)
 
       IMU_update_model(&imu_model);
       ibus_read_as_percents(ibus_data);
+      ibus_failsafe_check(ibus_data);
 
       if (ibus_is_armed(ibus_data)) {
 
@@ -155,7 +156,6 @@ int main(void)
           esc_commands[i] = 0;
         }
       }
-
       dshot_write_from_percents(esc_commands);
     } 
     
