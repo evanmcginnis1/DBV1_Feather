@@ -22,9 +22,6 @@
 #include "dma.h"
 #include "i2c.h"
 #include "spi.h"
-#include "stm32f405xx.h"
-#include "stm32f4xx_hal_rcc.h"
-#include "stm32f4xx_hal_tim.h"
 #include "tim.h"
 #include "usart.h"
 #include "usb_otg.h"
@@ -126,11 +123,13 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
-  //ibus_init(&huart1);
+
   set_loop_rate(100);
   dshot_init(DSHOT300);
-  ibus_init(&huart1);
+  ibus_init(IBUS_UART);
   IMU_init(&hi2c1);
+  //need to start timer explicitly
+  HAL_TIM_Base_Start_IT(MAIN_LOOP_TIM);
 
   /* USER CODE END 2 */
 
@@ -149,20 +148,19 @@ int main(void)
       if (ibus_is_armed(ibus_data)) {
 
         pid_update(&imu_model, ibus_data, esc_commands);
+        dshot_write_from_percents(esc_commands);
 
       } else {
         //send zero throttle signal if quadcopter is disarmed
-        for (int i = 0; i < 4; i++) {
-          esc_commands[i] = 0;
-        }
+        dshot_write_zeroes();
       }
-      dshot_write_from_percents(esc_commands);
-    } 
+    }
+  } 
     
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-  }
+
   /* USER CODE END 3 */
 }
 
