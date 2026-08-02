@@ -118,6 +118,11 @@ void dshot_write_raw(const uint16_t* motor_throttles) {
     dshot_enable_dma_request();
 }
 
+void dshot_write_zeroes(void) {
+    uint16_t throttles[4] = {0};
+    dshot_write_raw(throttles);
+}
+
 //tick frequency = bit rate (same as baud rate) * tick length
 static uint32_t get_dshot_tick_freq_hz(dshot_type_e dshot_type) {
     uint32_t dshot_bitrate = (uint32_t)dshot_type * 1000;
