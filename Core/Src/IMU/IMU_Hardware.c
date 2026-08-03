@@ -53,7 +53,7 @@ HAL_StatusTypeDef set_IMU_page(IMU_Page_Sel_t page_num) {
 *           IMU Overall Configuration            *
 **************************************************/
 //consider changing to be preprocessor based
-HAL_StatusTypeDef set_IMU_default_config(void) {
+HAL_StatusTypeDef IMU_default_config(void) {
 	HAL_StatusTypeDef status;
 	IMU_Config_t default_config = {
 		.imu_opr_mode = IMU_OPR_MODE,

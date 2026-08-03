@@ -14,6 +14,7 @@
 
 void IMU_init(I2C_HandleTypeDef* hi2c) {
     IMU_begin_i2c(hi2c);
+    //IMU_default_config();
     send_IMU_config_to_sensor();
     //does nothing for now
     //IMU_calibrate_sensors();

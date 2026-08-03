@@ -432,7 +432,7 @@ HAL_StatusTypeDef set_IMU_page(IMU_Page_Sel_t page_num);
 * Effects: updates config registers on sensor for accelerometer, magnetometer, gyroscope.
 *          
 */
-HAL_StatusTypeDef set_IMU_default_config(void);
+HAL_StatusTypeDef IMU_default_config(void);
 
 /*
 * Requires: 
