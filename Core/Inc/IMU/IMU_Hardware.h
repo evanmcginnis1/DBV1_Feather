@@ -89,6 +89,14 @@ typedef enum {
 #define IMU_REG_SYS_TRIGGER 0x3F
 #define IMU_RST_INT_EN 0x40
 #define IMU_CLK_SEL_EN 0x80
+
+//page 1
+#define IMU_REG_INT_EN 0x10
+#define IMU_INT_EN_ACC_BSX_DRDY_ENABLE 0x01
+
+//page 1
+#define IMU_REG_INT_MSK 0x0F
+#define IMU_INT_MSK_ACC_BSX_DRDY_ENABLE 0x01
 /*************************************************
 *             IMU Data Registers              *
 **************************************************/

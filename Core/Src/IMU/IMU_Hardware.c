@@ -377,23 +377,42 @@ void IMU_calculate_dt(const uint32_t* prev_timestamp, const uint32_t* newdata_ti
 
 }
 
+// enabling imu data ready interrupt requires enabling the acceleration interrupt, then enabling that interrupt to 
+// trigger the interrupt pin. 
+
 HAL_StatusTypeDef IMU_enable_fusion_dataready_interrupt(void) {
+	uint8_t int_en_buf;
+	uint8_t int_msk_buf;
+	HAL_StatusTypeDef status;
+
+	status = IMU_set_page(IMU_PAGE_1);
+
+	status |= IMU_read_register(IMU_REG_INT_EN, &int_en_buf, 1);
+	int_en_buf |= IMU_INT_EN_ACC_BSX_DRDY_ENABLE;
+	status |= IMU_write_register(IMU_REG_INT_EN, &int_en_buf);
+
+	status |= IMU_read_register(IMU_REG_INT_MSK, &int_msk_buf, 1);
+	int_msk_buf |= IMU_INT_MSK_ACC_BSX_DRDY_ENABLE;
+	status |= IMU_write_register(IMU_REG_INT_MSK, &int_msk_buf);
+
+	status |= IMU_set_page(IMU_PAGE_0);
+
 	//start input capture on STM32
 	HAL_TIM_IC_Start_IT(IMU_INTERRUPT_TIM, IMU_INTERRUPT_TIM_CHANNEL);
-	return HAL_OK;
+	return status; 
 }
 
 HAL_StatusTypeDef IMU_reset_interrupt(void) {
 	uint8_t sys_trig_buf;
 	// switch to page 1
-	IMU_set_page(IMU_PAGE_1);
-	HAL_StatusTypeDef status = IMU_read_register(IMU_REG_SYS_TRIGGER, &sys_trig_buf, 1);
+	HAL_StatusTypeDef status = IMU_set_page(IMU_PAGE_1);
+	status |= IMU_read_register(IMU_REG_SYS_TRIGGER, &sys_trig_buf, 1);
 
 	//set bit 6 high to reset interrupt
 	sys_trig_buf |= IMU_RST_INT_EN;
 
-	status = IMU_write_register(IMU_REG_SYS_TRIGGER, &sys_trig_buf);
-	IMU_set_page(IMU_PAGE_0);
+	status |= IMU_write_register(IMU_REG_SYS_TRIGGER, &sys_trig_buf);
+	status |= IMU_set_page(IMU_PAGE_0);
 	return status;
 }
 
@@ -402,6 +421,6 @@ HAL_StatusTypeDef IMU_enable_external_oscillator(void) {
 	HAL_StatusTypeDef status = IMU_read_register(IMU_REG_SYS_TRIGGER, &sys_trig_buf, 1);
 	sys_trig_buf |= IMU_CLK_SEL_EN;
 
-	status = IMU_write_register(IMU_REG_SYS_TRIGGER, &sys_trig_buf);
+	status |= IMU_write_register(IMU_REG_SYS_TRIGGER, &sys_trig_buf);
 	return status; 
 }
