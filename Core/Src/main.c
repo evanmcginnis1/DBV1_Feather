@@ -56,9 +56,9 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-volatile uint16_t capture_value = 0;
-volatile uint16_t prev_capture_value = 0;
-volatile uint16_t time_step = 0;
+//timer 2 is a 32 bit timer, so need to use uint32_t
+volatile uint32_t capture_value = 0;
+volatile uint32_t prev_capture_value = 0;
 volatile bool imu_data_ready = false;
 /* USER CODE END PV */
 
@@ -88,7 +88,6 @@ int main(void)
   IMU_Model_t imu_model;
   uint16_t ibus_data[IBUS_NUM_CHANNELS];
   uint16_t esc_commands[4] = {0};
-  float time_step_seconds = 0;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -124,8 +123,6 @@ int main(void)
   ibus_init(IBUS_UART);
   IMU_init(&hi2c1);
   
-  //start input capture for IMU interrupt
-  HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -135,15 +132,15 @@ int main(void)
     //only update pid if new IMU data is ready
     if (imu_data_ready) {
       //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
-      time_step_seconds = (float) time_step / 1000000.0f;
-      IMU_update_model(&imu_model);
+
+      IMU_update_model(&imu_model, prev_capture_value, capture_value);
       ibus_read_as_percents(ibus_data);
       ibus_failsafe_check(ibus_data);
 
 
       if (ibus_is_armed(ibus_data)) {
         HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
-        pid_update(&imu_model, ibus_data, esc_commands, &time_step_seconds);
+        pid_update(&imu_model, ibus_data, esc_commands);
         dshot_write_from_percents(esc_commands);
 
       } else {
@@ -218,6 +215,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
   if (htim == &htim2) {
     prev_capture_value = capture_value;
     capture_value = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+    imu_data_ready = true;
   }
 }
 
