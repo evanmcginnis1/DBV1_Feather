@@ -69,9 +69,7 @@ void set_loop_rate(uint32_t loop_rate_hz);
 #define UNUSEDA10_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
-#define LOOP_TIM_TICK_RATE_HZ 1000000
-#define MAIN_LOOP_TIM_CLK 84000000
-#define MAIN_LOOP_TIM (&htim2)
+
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

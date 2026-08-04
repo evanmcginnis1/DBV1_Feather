@@ -12,6 +12,7 @@
 #include <IMU_Config.h>
 #include <IMU_Hardware.h>
 #include <IMU_Model.h>
+#include <stdbool.h>
 
 
 /*
@@ -21,5 +22,5 @@
 */
 void IMU_init(I2C_HandleTypeDef* hi2c);
 
-void IMU_update_model(IMU_Model_t* imu_model);
+void IMU_update_model(IMU_Model_t* imu_model, const uint32_t prev_timestamp, const uint32_t newdata_timestamp);
 #endif /* IMU_CONDUCTOR_H_ */

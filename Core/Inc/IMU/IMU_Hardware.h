@@ -70,7 +70,6 @@ typedef enum {
 //accelerometer range config
 //all bits written to configure accel
 #define IMU_REG_ACC_CONFIG      0x08
-
 #define IMU_REG_MAG_CONFIG      0x09
 // preserve highest bit
 #define IMU_MAG_CONFIG_MASK     0x7F
@@ -86,6 +85,10 @@ typedef enum {
 
 #define IMU_REG_AXIS_MAP_CONFIG 0x41
 #define IMU_REG_AXIS_MAP_SIGN   0x42
+
+#define IMU_REG_SYS_TRIGGER 0x3F
+#define IMU_RST_INT_EN 0x40
+#define IMU_CLK_SEL_EN 0x80
 /*************************************************
 *             IMU Data Registers              *
 **************************************************/
@@ -93,10 +96,8 @@ typedef enum {
 //raw gyro data register
 #define IMU_REG_GYR_DATA_X_LSB 0x14
 #define IMU_REG_GYR_DATA_X_MSB 0x15
-
 #define IMU_REG_GYR_DATA_Y_LSB 0x16
 #define IMY_REG_GYR_DATA_Y_MSB 0x17
-
 #define IMU_REG_GYR_DATA_Z_LSB 0x18
 #define IMU_REG_GYR_DATA_Z_MSB 0x19
 
@@ -104,47 +105,34 @@ typedef enum {
 // Fused Euler orientation data registers
 #define IMU_REG_EUL_DATA_X_LSB 0x1A
 #define IMU_REG_EUL_DATA_X_MSB 0x1B
-
 #define IMU_REG_EUL_DATA_Y_LSB 0x1C
 #define IMU_REG_EUL_DATA_Y_MSB 0x1D
-
 #define IMU_REG_EUL_DATA_Z_LSB 0x1E
 #define IMU_REG_EUL_DATA_Z_MSB 0x1F
 
 //Fused Quaternion orientation registers
 #define IMU_REG_QUA_DATA_W_LSB 0x20
 #define IMU_REG_QUA_DATA_W_MSB 0x21
-
 #define IMU_REG_QUA_DATA_X_LSB 0x22
 #define IMU_REG_QUA_DATA_X_MSB 0x23
-
 #define IMU_REG_QUA_DATA_Y_LSB 0x24
 #define IMU_REG_QUA_DATA_Y_MSB 0x25
-
 #define IMU_REG_QUA_DATA_Z_LSB 0x26
 #define IMU_REG_QUA_DATA_Z_MSB 0x27
-
-
 
 //Linear acceleration data registers
 #define IMU_REG_LIA_DATA_X_LSB 0x28
 #define IMU_REG_LIA_DATA_X_MSB 0x29
-
 #define IMU_REG_LIA_DATA_Y_LSB 0x2A
 #define IMU_REG_LIA_DATA_Y_MSB 0x2B
-
 #define IMU_REG_LIA_DATA_Z_LSB 0x2C
 #define IMU_REG_LIA_DATA_Z_MSB 0x2D
-
-
 
 //gravity vector data
 #define IMU_REG_GRV_DATA_X_LSB 0x2E
 #define IMU_REG_GRV_DATA_X_MSB 0x2F
-
 #define IMU_REG_GRV_DATA_Y_LSB 0x30
 #define IMU_REG_GRV_DATA_Y_MSB 0x31
-
 #define IMU_REG_GRV_DATA_Z_LSB 0x32
 #define IMU_REG_GRV_DATA_Z_MSB 0x33
 
@@ -389,7 +377,7 @@ typedef struct {
 } IMU_t;
 
 /*************************************************
-*           IMU I2C Interface                    *
+*                   Functions                    *
 **************************************************/
 
 /*
@@ -397,57 +385,28 @@ typedef struct {
 * Modifies: imu object hi2c member
 * Effects: Returns nothing. 
 */
-void IMU_begin_i2c(I2C_HandleTypeDef* hi2c);
+void IMU_configure_i2c(I2C_HandleTypeDef* hi2c);
 
-/*
- * Requires: register_addr is the address of the sensor register to be read
- * 			 rx_buffer is the buffer to store the data recieved from the sensor
- * 			 num_bytes_to_read is an unsigned integer greater than zero
- * Modifies: rx_buffer
- * Effects: returns status of transaction
- */
-HAL_StatusTypeDef read_IMU_register(uint8_t register_addr, uint8_t* rx_buffer, 
-                                    uint8_t num_bytes_to_read);
-
-/* Requires: register_addr is a valid register address on IMU, tx_buffer is 1 byte of data to send
- * Modifies: One IMU register byte
- * Effects: returns i2c transaction status. 
- */
-HAL_StatusTypeDef write_IMU_register(uint8_t register_addr, uint8_t* tx_buffer);
-
-/*
-* Requires: page_num is either 1 or 0
-* Modifies: Page_ID register on IMU
-* Effects: sets page ID register on IMU
-*/ 
-HAL_StatusTypeDef set_IMU_page(IMU_Page_Sel_t page_num);
 
 /*************************************************
 *           IMU Overall Configuration            *
 **************************************************/
 
 /*
-* Requires: nothing
-* Modifies: 
-* Effects: updates config registers on sensor for accelerometer, magnetometer, gyroscope.
+* Requires: configuration is defined in IMU_Config.h
+* Modifies: registers on IMU, IMU_setup object
+* Effects: updates config registers on sensor for accelerometer, magnetometer, gyroscope based on predefined values in 
+           IMU_Config.h
 *          
 */
-HAL_StatusTypeDef IMU_default_config(void);
-
-/*
-* Requires: 
-* Modifies: IMU PAGE_ID, 
-* Effects: If a fusion mode is selected, sets IMU OPR_MODE register to that mode, and skips individual sensor config.
-           Otherwise, writes to all config registers of IMU (besides IMU PWR_MODE)
-*/
-HAL_StatusTypeDef send_IMU_config_to_sensor(void);
+HAL_StatusTypeDef IMU_set_default_config(void);
 
 /*
 * Requires: new_config is a fully defined struct of type IMU_Config_t
 * Modifies: config registers on IMU
-* Effects:
+* Effects: overwrites IMU_setup variable, sends new configuration to the IMU
 */
-HAL_StatusTypeDef update_IMU_config(IMU_Config_t* new_config);
+HAL_StatusTypeDef IMU_update_config(IMU_Config_t* new_config);
 
 //function to set units - units are chosen by #define in IMU_conductor.h
 /*
@@ -455,7 +414,7 @@ HAL_StatusTypeDef update_IMU_config(IMU_Config_t* new_config);
 * Modifies: IMU UNIT_SEL register
 * Effects:  Sets units for acceleration, rotation, rotation rate, and magnetic field strength
 */
-HAL_StatusTypeDef set_IMU_units(void);
+HAL_StatusTypeDef IMU_set_units(void);
 
 //functions for overall sensor config
 /*
@@ -463,8 +422,9 @@ HAL_StatusTypeDef set_IMU_units(void);
 * Modifies: IMU OPR_MODE register
 * Effects:  Sets operation mode on IMU
 */
-HAL_StatusTypeDef set_IMU_operation_mode(IMU_OprMode_t operation_mode);
+HAL_StatusTypeDef IMU_set_operation_mode(IMU_OprMode_t operation_mode);
 
+HAL_StatusTypeDef IMU_reset_interrupt(void);
 /*************************************************
 *           Individual Sensor Config             *
 **************************************************/
@@ -474,14 +434,14 @@ HAL_StatusTypeDef set_IMU_operation_mode(IMU_OprMode_t operation_mode);
 * Modifies:
 * Effects:
 */
-HAL_StatusTypeDef set_IMU_accel_config(IMU_AccelConfig_t* accel_config);
+HAL_StatusTypeDef IMU_set_accel_config(IMU_AccelConfig_t* accel_config);
 
 /*
 * Requires: IMU registers pre-set to page 1
 * Modifies:
 * Effects:
 */
-HAL_StatusTypeDef set_IMU_gyro_config(IMU_GyroConfig_t* gyro_config);
+HAL_StatusTypeDef IMU_set_gyro_config(IMU_GyroConfig_t* gyro_config);
 
 /*
 * Requires: IMU registers pre-set to page 1
@@ -504,13 +464,6 @@ HAL_StatusTypeDef IMU_set_calibration_profile(void);
 **************************************************/
 
 /*
-* Requires: QUAT_w, QUAT_x, QUAT_y, QUAT_z are pointers to floats. 
-* Modifies: QUAT_w, QUAT_x, QUAT_y, QUAT_z
-* Effects: Reads IMU fused quaterion data
-*/
-HAL_StatusTypeDef IMU_get_quat_data(float* QUAT_w, float* QUAT_x, float* QUAT_y, float* QUAT_z);
-
-/*
 * Requires: 
 * Modifies:
 * Effects:
@@ -524,20 +477,6 @@ HAL_StatusTypeDef IMU_get_euler_data(float* EUL_heading, float* EUL_roll, float*
 */
 HAL_StatusTypeDef IMU_get_accel_rawdata(float* accel_x, float* accel_y, float* accel_z);
 
-/*
-* Requires: 
-* Modifies:
-* Effects:
-*/
-HAL_StatusTypeDef IMU_get_grav_data(float* grav_x, float* grav_y, float* grav_z);
-
-/*
-* Requires: 
-* Modifies:
-* Effects:
-*/
-HAL_StatusTypeDef IMU_get_lin_accel_data(float* linaccel_x, float* linaccel_y, float* linaccel_z);
-
 HAL_StatusTypeDef IMU_get_gyro_rawdata(float* pitch, float* roll, float* yaw);
 /*
 * Requires: 
@@ -546,4 +485,22 @@ HAL_StatusTypeDef IMU_get_gyro_rawdata(float* pitch, float* roll, float* yaw);
 */
 HAL_StatusTypeDef IMU_get_chipID(uint8_t* chipID);
 
+/*
+ * Requires: prev_timestamp and newdata_timestamp are in ticks
+ * Modifies: dt
+ * Effects: calculates time between events in seconds
+ */
+void IMU_calculate_dt(const uint32_t* prev_timestamp, const uint32_t* newdata_timestamp, float* dt_seconds);
+
+HAL_StatusTypeDef IMU_enable_fusion_dataready_interrupt(void);
+
+/*
+ * Requires: External oscillator is connected to BNO055 IMU
+ * Modifies: SYS_TRIGGER register on BNO055
+ * Effects: 
+ */
+HAL_StatusTypeDef IMU_enable_external_oscillator();
+
 #endif /* SRC_IMU_HARDWARE_H_ */
+
+

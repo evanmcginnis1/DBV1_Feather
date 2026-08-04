@@ -27,7 +27,7 @@ Modifies: updates prev_error term in given pid_info object with new error. updat
 Effects: calculates error, integrated error, and the rate of change of the error. Then, multiplies these with their 
          respective gain values and sums them. 
 */
-static void pid_step(PID_t* pid_info, const float* actual_val, const float* setpoint, uint16_t* output);
+static void pid_step(PID_t* pid_info, const float* actual_val, const float* setpoint, const float* time_step, uint16_t* output);
 /*
 Requires: imu has been updated with data from the imu. setpoint is an array of values representing degrees for pitch and
           roll and degrees per second for yaw.
@@ -55,7 +55,14 @@ Modifies: resets pid_info.accumulated_error variable if it is pushing the motor 
 Effects:  Checks if esc command is greater than limit or less than minimum. If so, resets accumulated error terms that 
           are pushing further past limit in order to prevent integrator windup. 
 */
-static void check_integrator(int16_t* esc_commands_pct);
+static void check_integrator(int16_t* esc_signed_commands_pct);
+/*
+ * Requires: esc_commands_pct is an array whose values lie between 0 and 1000. This is the output of the pid loop
+ * Modifies: esc_commands_pct if any of its values lie below the idle speed
+ * Effects: checks if any of the throttle levels are below the idle speed. If it is, then increases all throttles by an
+            equal amount such that the lowest one is now at idle speed. 
+ */
+static void check_idle(uint16_t* esc_commands_pct);
 
 void pid_init(void) {
     pid_roll_info.accumulated_error = 0;
@@ -90,11 +97,12 @@ https://timhanewich.medium.com/how-i-developed-the-scout-flight-controller-part-
  *
 */
 void pid_update(const IMU_Model_t* imu, const uint16_t* pilot_command, uint16_t* esc_commands_pct) {
-    float setpoint[4];
+    float setpoint[NUM_MOTORS];
 
     pilot_command_to_setpoint(pilot_command, setpoint);
     pid_step_all(imu, setpoint);
     synthesize_pid_commands(&setpoint[2], esc_commands_pct);
+    check_idle(esc_commands_pct);
 }
 
 //pilot_command[0] = roll
@@ -104,24 +112,24 @@ void pid_update(const IMU_Model_t* imu, const uint16_t* pilot_command, uint16_t*
 //pilot_command[4] = ARM/DISARM
 static void pid_step_all(const IMU_Model_t* imu, const float* setpoint) {
     //PID roll step
-    pid_step(&pid_roll_info, &imu->roll_abs, &setpoint[0], &pid_axis_out_pct.roll_pct);
+    pid_step(&pid_roll_info, &imu->roll_abs, &setpoint[0], &imu->dt, &pid_axis_out_pct.roll_pct);
     //PID pitch step
-    pid_step(&pid_pitch_info, &imu->pitch_abs, &setpoint[1], &pid_axis_out_pct.pitch_pct);
+    pid_step(&pid_pitch_info, &imu->pitch_abs, &setpoint[1], &(imu->dt), &pid_axis_out_pct.pitch_pct);
     //PID yaw step
-    pid_step(&pid_yaw_info, &imu->yaw_rate, &setpoint[3], &pid_axis_out_pct.yaw_pct);
+    pid_step(&pid_yaw_info, &imu->yaw_rate, &setpoint[3], &imu->dt, &pid_axis_out_pct.yaw_pct);
 
     return;
 }
 
 //KP, KI, KD should be sized so that the output is an integer between 0 and 1000
-static void pid_step(PID_t* pid_info, const float* actual_val, const float* setpoint, uint16_t* output) {
+static void pid_step(PID_t* pid_info, const float* actual_val, const float* setpoint, const float* dt, uint16_t* output) {
     float error = *setpoint - *actual_val;
     //new_accum_error is part of static struct so that integral clamp can be applied in separate function
-    pid_info->new_accum_error = error * (1.0  / PID_LOOP_RATE_HZ);
+    pid_info->new_accum_error = error * *dt;
 
     float p = error * pid_info->kp;
     float i = (pid_info->accumulated_error + pid_info->new_accum_error) * pid_info->ki;
-    float d = ((error - pid_info->prev_error) * PID_LOOP_RATE_HZ) * pid_info->kd;
+    float d = ((error - pid_info->prev_error) / *dt) * pid_info->kd;
 
     *output = lrintf(p + i + d);
 
@@ -159,7 +167,7 @@ static void pilot_command_to_setpoint(const uint16_t* pilot_command, float* setp
 static void synthesize_pid_commands(const float* throttle_command_pct, uint16_t* esc_command_pct) {
     //synthesize commands
     //esc_command index corresponds to motor index on quadcopter
-    int16_t signed_commands[4];
+    int16_t signed_commands[NUM_MOTORS];
 
     signed_commands[0] = *throttle_command_pct + pid_axis_out_pct.roll_pct + pid_axis_out_pct.pitch_pct - pid_axis_out_pct.yaw_pct;
     signed_commands[1] = *throttle_command_pct + pid_axis_out_pct.roll_pct - pid_axis_out_pct.pitch_pct + pid_axis_out_pct.yaw_pct;
@@ -169,7 +177,7 @@ static void synthesize_pid_commands(const float* throttle_command_pct, uint16_t*
     check_integrator(signed_commands);
 
     //ensure valid output
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < NUM_MOTORS; i++) {
         if (signed_commands[i] > 1000) {
             signed_commands[i] = 1000;
         }
@@ -185,8 +193,8 @@ static void synthesize_pid_commands(const float* throttle_command_pct, uint16_t*
 }
 
 //lots of conditionals, but majority of them are nested and will not be called regularly. 
-static void check_integrator(int16_t* esc_commands_pct) {
-    if (esc_commands_pct[0] > 1000) {
+static void check_integrator(int16_t* esc_signed_commands_pct) {
+    if (esc_signed_commands_pct[0] > 1000) {
         if (pid_roll_info.accumulated_error > 0) {
             pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
         }
@@ -198,7 +206,7 @@ static void check_integrator(int16_t* esc_commands_pct) {
             pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
         }
 
-    } else if (esc_commands_pct[0] < 0) {
+    } else if (esc_signed_commands_pct[0] < 0) {
         if (pid_yaw_info.accumulated_error > 0) {
             pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
         }
@@ -210,7 +218,7 @@ static void check_integrator(int16_t* esc_commands_pct) {
         }
     }
 
-    if (esc_commands_pct[1] > 1000) {
+    if (esc_signed_commands_pct[1] > 1000) {
         if (pid_roll_info.accumulated_error > 0) {
             pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
         }
@@ -220,7 +228,7 @@ static void check_integrator(int16_t* esc_commands_pct) {
         if (pid_pitch_info.accumulated_error < 0) {
             pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
         }
-    } else if (esc_commands_pct[1] < 0) {
+    } else if (esc_signed_commands_pct[1] < 0) {
         if (pid_pitch_info.accumulated_error > 0) {
             pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
         }
@@ -232,7 +240,7 @@ static void check_integrator(int16_t* esc_commands_pct) {
         }
     }
 
-    if (esc_commands_pct[2] > 1000) {
+    if (esc_signed_commands_pct[2] > 1000) {
         if (pid_pitch_info.accumulated_error > 0) {
             pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
         }
@@ -242,7 +250,7 @@ static void check_integrator(int16_t* esc_commands_pct) {
         if (pid_roll_info.accumulated_error < 0) {
             pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
         }
-    } else if (esc_commands_pct[2] < 0) {
+    } else if (esc_signed_commands_pct[2] < 0) {
         if (pid_roll_info.accumulated_error > 0) {
             pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
         }
@@ -254,7 +262,7 @@ static void check_integrator(int16_t* esc_commands_pct) {
         }
     }
 
-    if (esc_commands_pct[3] > 1000) {
+    if (esc_signed_commands_pct[3] > 1000) {
         if (pid_pitch_info.accumulated_error < 0) {
             pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
         }
@@ -265,7 +273,7 @@ static void check_integrator(int16_t* esc_commands_pct) {
             pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
         }
     } 
-    else if (esc_commands_pct[3] < 0) {
+    else if (esc_signed_commands_pct[3] < 0) {
         if (pid_pitch_info.accumulated_error > 0) {
             pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
         }
@@ -274,6 +282,27 @@ static void check_integrator(int16_t* esc_commands_pct) {
         }
         if (pid_roll_info.accumulated_error > 0) {
             pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
+        }
+    }
+}
+
+static void check_idle(uint16_t* esc_commands_pct) {
+    uint16_t shift_distance = 0;
+    bool shift_needed = false;
+    for (int i = 0; i < NUM_MOTORS; i++) {
+        if (esc_commands_pct[i] < PID_OUTPUT_IDLE) {
+            shift_needed = true;
+            uint16_t temp_shift_distance = PID_OUTPUT_IDLE - esc_commands_pct[i];
+            if (temp_shift_distance > shift_distance) {
+                shift_distance = temp_shift_distance;
+            }
+        }
+    }
+    if (shift_needed) {
+        for (int i = 0; i < NUM_MOTORS; i++) {
+            if ((PID_OUTPUT_MAX - esc_commands_pct[i]) <= shift_distance) {
+                esc_commands_pct[i] += shift_distance;
+            }
         }
     }
 }

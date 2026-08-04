@@ -22,6 +22,7 @@
 #include "dma.h"
 #include "i2c.h"
 #include "spi.h"
+#include "stm32f4xx_hal_tim.h"
 #include "tim.h"
 #include "usart.h"
 #include "usb_otg.h"
@@ -55,21 +56,15 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-volatile bool loop_ready_flag = 0;
+//timer 2 is a 32 bit timer, so need to use uint32_t
+volatile uint32_t capture_value = 0;
+volatile uint32_t prev_capture_value = 0;
+volatile bool imu_data_ready = false;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-void set_loop_rate(uint32_t loop_rate_hz) {
-  uint32_t tim_clk = MAIN_LOOP_TIM_CLK;
-
-  uint16_t tim_PSC = lrintf((float) tim_clk / LOOP_TIM_TICK_RATE_HZ) - 1;
-  uint32_t tim_ARR = loop_rate_hz / LOOP_TIM_TICK_RATE_HZ;
-
-  __HAL_TIM_SET_PRESCALER(MAIN_LOOP_TIM, tim_PSC);
-  __HAL_TIM_SET_AUTORELOAD(MAIN_LOOP_TIM, tim_ARR);
-}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -78,8 +73,9 @@ void set_loop_rate(uint32_t loop_rate_hz) {
 // for ibus software failsafe
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
 //for timer
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
 /* USER CODE END 0 */
+
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim);
 
 /**
   * @brief  The application entry point.
@@ -123,30 +119,27 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
-
-  set_loop_rate(100);
   dshot_init(DSHOT300);
   ibus_init(IBUS_UART);
   IMU_init(&hi2c1);
-  //need to start timer explicitly
-  HAL_TIM_Base_Start_IT(MAIN_LOOP_TIM);
-
+  
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    //only run loop if it has been enough time since last cycle
-    if (loop_ready_flag) {
-      loop_ready_flag = 0;
+    //only update pid if new IMU data is ready
+    if (imu_data_ready) {
+      //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
 
-      IMU_update_model(&imu_model);
+      IMU_update_model(&imu_model, prev_capture_value, capture_value);
       ibus_read_as_percents(ibus_data);
       ibus_failsafe_check(ibus_data);
 
-      if (ibus_is_armed(ibus_data)) {
 
+      if (ibus_is_armed(ibus_data)) {
+        HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
         pid_update(&imu_model, ibus_data, esc_commands);
         dshot_write_from_percents(esc_commands);
 
@@ -218,9 +211,11 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 		ibus_reset_failsafe();
 }
 
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-  if (htim == MAIN_LOOP_TIM) {
-    loop_ready_flag = 1;
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim) {
+  if (htim == &htim2) {
+    prev_capture_value = capture_value;
+    capture_value = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+    imu_data_ready = true;
   }
 }
 

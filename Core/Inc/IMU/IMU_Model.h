@@ -17,6 +17,7 @@ typedef struct {
     float pitch_rate;
     float yaw_rate;
     float roll_rate;
+    float dt;
 } IMU_Model_t;
 
  #endif /* IMU_MODEL_H_ */
