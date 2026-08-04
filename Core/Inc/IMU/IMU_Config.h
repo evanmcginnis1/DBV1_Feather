@@ -13,6 +13,7 @@
 #include "IMU_Hardware.h"
 #include "tim.h"
 #define IMU_INTERRUPT_TIM (&htim2)
+#define IMU_INTERRUPT_TIM_CHANNEL TIM_CHANNEL_1
 #define IMU_TIM_TICK_RATE_HZ 1000000
 #define IMU_TIM_CLK 84000000
 
