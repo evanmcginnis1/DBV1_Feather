@@ -546,4 +546,11 @@ HAL_StatusTypeDef IMU_get_gyro_rawdata(float* pitch, float* roll, float* yaw);
 */
 HAL_StatusTypeDef IMU_get_chipID(uint8_t* chipID);
 
+/*
+ * Requires: prev_timestamp and newdata_timestamp are in seconds
+ * 
+ * 
+ */
+void IMU_calculate_dt(const float* prev_timestamp, const float* newdata_timestamp, float* dt);
+
 #endif /* SRC_IMU_HARDWARE_H_ */

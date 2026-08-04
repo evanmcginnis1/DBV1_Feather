@@ -13,24 +13,26 @@
 #include <stdint.h>
 #include "IMU_Model.h"
 
-#define PID_PITCH_KP 0
+#define PID_PITCH_KP 8
 #define PID_PITCH_KI 0
 #define PID_PITCH_KD 0
 
-#define PID_ROLL_KP 0
+#define PID_ROLL_KP 8
 #define PID_ROLL_KI 0
 #define PID_ROLL_KD 0
 
-#define PID_YAW_KP 0
+#define PID_YAW_KP 8
 #define PID_YAW_KI 0
 #define PID_YAW_KD 0
 
-//dshot throttle ranges from 48 to 2048; 2000 steps
-#define PID_OUTPUT_MAX 2048
-#define PID_FLIGHT_OUTPUT_MIN 48
-#define PID_OUTPUT_IDLE 1000
+//pit output ranges from 0 to 1000
+#define PID_OUTPUT_MAX 800
+#define PID_FLIGHT_OUTPUT_MIN 0
+#define PID_OUTPUT_IDLE 50
 
 #define PID_LOOP_RATE_HZ 100
+
+#define NUM_MOTORS 4
 //pid constants are stored in a struct so that they can be updated on the fly
 typedef struct {
     //gain values
