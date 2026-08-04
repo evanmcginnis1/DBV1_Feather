@@ -114,7 +114,7 @@ static void pid_step_all(const IMU_Model_t* imu, const float* setpoint) {
     //PID roll step
     pid_step(&pid_roll_info, &imu->roll_abs, &setpoint[0], &imu->dt, &pid_axis_out_pct.roll_pct);
     //PID pitch step
-    pid_step(&pid_pitch_info, &imu->pitch_abs, &setpoint[1], &(imu->dt, &pid_axis_out_pct.pitch_pct);
+    pid_step(&pid_pitch_info, &imu->pitch_abs, &setpoint[1], &(imu->dt), &pid_axis_out_pct.pitch_pct);
     //PID yaw step
     pid_step(&pid_yaw_info, &imu->yaw_rate, &setpoint[3], &imu->dt, &pid_axis_out_pct.yaw_pct);
 
