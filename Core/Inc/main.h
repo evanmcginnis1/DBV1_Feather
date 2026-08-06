@@ -61,8 +61,6 @@ void set_loop_rate(uint32_t loop_rate_hz);
 #define LED_BUILTIN_GPIO_Port GPIOC
 #define UNUSED_Pin GPIO_PIN_11
 #define UNUSED_GPIO_Port GPIOB
-#define SD_DETECT_Pin GPIO_PIN_12
-#define SD_DETECT_GPIO_Port GPIOB
 #define UNUSEDA9_Pin GPIO_PIN_9
 #define UNUSEDA9_GPIO_Port GPIOA
 #define UNUSEDA10_Pin GPIO_PIN_10
