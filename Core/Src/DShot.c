@@ -118,7 +118,7 @@ void dshot_write_raw(const uint16_t* motor_throttles) {
     dshot_enable_dma_request();
 }
 
-void dshot_write_zeroes(void) {
+void dshot_disarm(void) {
     uint16_t throttles[4] = {0};
     dshot_write_raw(throttles);
 }

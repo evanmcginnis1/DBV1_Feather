@@ -78,6 +78,6 @@ Effects:  Converts motor_throttles into DShot CCR values. Then, passes them into
 */
 void dshot_write_raw(const uint16_t* motor_throttles);
 
-void dshot_write_zeroes(void);
+void dshot_disarm(void);
 
  #endif
