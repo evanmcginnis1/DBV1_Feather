@@ -11,13 +11,14 @@
  #include <IMU_Hardware.h>
  #include <IMU_Model.h>
 
-
+//TODO: Implement calibration function
+//TODO: Redefine axes
 void IMU_init(I2C_HandleTypeDef* hi2c) {
-    IMU_begin_i2c(hi2c);
-    //IMU_default_config();
-    send_IMU_config_to_sensor();
-    //does nothing for now
-    //IMU_calibrate_sensors();
+    IMU_configure_i2c(hi2c);
+    //620ms total delay time
+    IMU_enable_external_oscillator();
+    //20ms delay time
+    IMU_default_config();
     //redefine IMU axes
 }
 

@@ -86,6 +86,10 @@ typedef enum {
 
 #define IMU_REG_AXIS_MAP_CONFIG 0x41
 #define IMU_REG_AXIS_MAP_SIGN   0x42
+
+//page 0
+#define IMU_REG_SYS_TRIGGER 0x3F
+#define IMU_CLK_SEL_EN 0x80
 /*************************************************
 *             IMU Data Registers              *
 **************************************************/
@@ -397,7 +401,7 @@ typedef struct {
 * Modifies: imu object hi2c member
 * Effects: Returns nothing. 
 */
-void IMU_begin_i2c(I2C_HandleTypeDef* hi2c);
+void IMU_configure_i2c(I2C_HandleTypeDef* hi2c);
 
 /*
  * Requires: register_addr is the address of the sensor register to be read
@@ -406,21 +410,21 @@ void IMU_begin_i2c(I2C_HandleTypeDef* hi2c);
  * Modifies: rx_buffer
  * Effects: returns status of transaction
  */
-HAL_StatusTypeDef read_IMU_register(uint8_t register_addr, uint8_t* rx_buffer, 
+HAL_StatusTypeDef IMU_read_register(uint8_t register_addr, uint8_t* rx_buffer, 
                                     uint8_t num_bytes_to_read);
 
 /* Requires: register_addr is a valid register address on IMU, tx_buffer is 1 byte of data to send
  * Modifies: One IMU register byte
  * Effects: returns i2c transaction status. 
  */
-HAL_StatusTypeDef write_IMU_register(uint8_t register_addr, uint8_t* tx_buffer);
+HAL_StatusTypeDef IMU_write_register(uint8_t register_addr, uint8_t* tx_buffer);
 
 /*
 * Requires: page_num is either 1 or 0
 * Modifies: Page_ID register on IMU
 * Effects: sets page ID register on IMU
 */ 
-HAL_StatusTypeDef set_IMU_page(IMU_Page_Sel_t page_num);
+HAL_StatusTypeDef IMU_set_page(IMU_Page_Sel_t page_num);
 
 /*************************************************
 *           IMU Overall Configuration            *
@@ -440,14 +444,7 @@ HAL_StatusTypeDef IMU_default_config(void);
 * Effects: If a fusion mode is selected, sets IMU OPR_MODE register to that mode, and skips individual sensor config.
            Otherwise, writes to all config registers of IMU (besides IMU PWR_MODE)
 */
-HAL_StatusTypeDef send_IMU_config_to_sensor(void);
-
-/*
-* Requires: new_config is a fully defined struct of type IMU_Config_t
-* Modifies: config registers on IMU
-* Effects:
-*/
-HAL_StatusTypeDef update_IMU_config(IMU_Config_t* new_config);
+HAL_StatusTypeDef IMU_send_config_to_sensor(void);
 
 //function to set units - units are chosen by #define in IMU_conductor.h
 /*
@@ -455,7 +452,7 @@ HAL_StatusTypeDef update_IMU_config(IMU_Config_t* new_config);
 * Modifies: IMU UNIT_SEL register
 * Effects:  Sets units for acceleration, rotation, rotation rate, and magnetic field strength
 */
-HAL_StatusTypeDef set_IMU_units(void);
+HAL_StatusTypeDef IMU_set_units(void);
 
 //functions for overall sensor config
 /*
@@ -463,7 +460,7 @@ HAL_StatusTypeDef set_IMU_units(void);
 * Modifies: IMU OPR_MODE register
 * Effects:  Sets operation mode on IMU
 */
-HAL_StatusTypeDef set_IMU_operation_mode(IMU_OprMode_t operation_mode);
+HAL_StatusTypeDef IMU_set_operation_mode(IMU_OprMode_t operation_mode);
 
 /*************************************************
 *           Individual Sensor Config             *
@@ -474,21 +471,21 @@ HAL_StatusTypeDef set_IMU_operation_mode(IMU_OprMode_t operation_mode);
 * Modifies:
 * Effects:
 */
-HAL_StatusTypeDef set_IMU_accel_config(IMU_AccelConfig_t* accel_config);
+HAL_StatusTypeDef IMU_set_accel_config(IMU_AccelConfig_t* accel_config);
 
 /*
 * Requires: IMU registers pre-set to page 1
 * Modifies:
 * Effects:
 */
-HAL_StatusTypeDef set_IMU_gyro_config(IMU_GyroConfig_t* gyro_config);
+HAL_StatusTypeDef IMU_set_gyro_config(IMU_GyroConfig_t* gyro_config);
 
 /*
 * Requires: IMU registers pre-set to page 1
 * Modifies: 
 * Effects:
 */
-HAL_StatusTypeDef set_IMU_mag_config(IMU_MagConfig_t* mag_config);
+HAL_StatusTypeDef IMU_set_mag_config(IMU_MagConfig_t* mag_config);
 
 HAL_StatusTypeDef IMU_remap_axes(void);
 
@@ -545,5 +542,12 @@ HAL_StatusTypeDef IMU_get_gyro_rawdata(float* pitch, float* roll, float* yaw);
 * Effects:
 */
 HAL_StatusTypeDef IMU_get_chipID(uint8_t* chipID);
+
+/*
+ * Requires: External oscillator is connected to IMU
+ * Modifies: IMU_SYS_TRIGGER register
+ * Effects: Sets IMU to use an external oscillator for its clock
+ */
+HAL_StatusTypeDef IMU_enable_external_oscillator(void);
 
 #endif /* SRC_IMU_HARDWARE_H_ */

@@ -26,27 +26,27 @@
 // with it
 static IMU_t imu_setup;
 
-void IMU_begin_i2c(I2C_HandleTypeDef *hi2c) {
+void IMU_configure_i2c(I2C_HandleTypeDef *hi2c) {
 	imu_setup.hi2c = hi2c; 
 }
 
 //writes a single byte to a single register address on IMU
-HAL_StatusTypeDef read_IMU_register(uint8_t register_addr, uint8_t* rx_buffer, 
+HAL_StatusTypeDef IMU_read_register(uint8_t register_addr, uint8_t* rx_buffer, 
 	                                uint8_t num_bytes_to_read) {
 
 	return HAL_I2C_Mem_Read(imu_setup.hi2c,IMU_I2C_ADDR_SHIFTED,register_addr, IMU_REGISTER_ADDR_SIZE,
 		                    rx_buffer,num_bytes_to_read,IMU_I2C_TIMEOUT);
 }
 
-HAL_StatusTypeDef write_IMU_register(uint8_t register_addr, uint8_t* tx_buffer) {
+HAL_StatusTypeDef IMU_write_register(uint8_t register_addr, uint8_t* tx_buffer) {
 	return HAL_I2C_Mem_Write(imu_setup.hi2c, IMU_I2C_ADDR_SHIFTED, register_addr, IMU_REGISTER_ADDR_SIZE, tx_buffer,
 		                     SINGLE_WRITE_DATA_SIZE, IMU_I2C_TIMEOUT);
 }
 
 //does not check if register is already set to selected page
-HAL_StatusTypeDef set_IMU_page(IMU_Page_Sel_t page_num) {
+HAL_StatusTypeDef IMU_set_page(IMU_Page_Sel_t page_num) {
 	//cast page_num to be a uint8_t explicitly
-	return write_IMU_register(IMU_REG_PAGE_ID, (uint8_t*)&page_num);
+	return IMU_write_register(IMU_REG_PAGE_ID, (uint8_t*)&page_num);
 }
 
 /*************************************************
@@ -74,25 +74,20 @@ HAL_StatusTypeDef IMU_default_config(void) {
 		}
 	};
 	imu_setup.config = default_config;
-	status = send_IMU_config_to_sensor();
+	status = IMU_send_config_to_sensor();
 	return status;
 }
 
-HAL_StatusTypeDef update_IMU_config(IMU_Config_t* new_config) {
-	imu_setup.config = *new_config;
-	return send_IMU_config_to_sensor();
-}
-
 //send_IMU_config_to_sensor handles switching to page 1, then switches back to page 0
-HAL_StatusTypeDef send_IMU_config_to_sensor(void) {
+HAL_StatusTypeDef IMU_send_config_to_sensor(void) {
 	//get the config object from IMU_t object
 	// TODO: check if setting config mode induces a delay in sensor data; is 
 	// config mode necessary
 
 	//|= logic ensures that function will keep writing to registers even if one of the writes fails
 	HAL_StatusTypeDef status;
-	status = set_IMU_page(IMU_PAGE_0);
-	status  |= set_IMU_operation_mode(IMU_OPR_MODE_CONFIGMODE);
+	status = IMU_set_page(IMU_PAGE_0);
+	status  |= IMU_set_operation_mode(IMU_OPR_MODE_CONFIGMODE);
 	//datasheet requires 19ms switching time when switching to config mode
 	HAL_Delay(20);
 	// skip setting power mode because it will always be normal mode
@@ -105,36 +100,36 @@ HAL_StatusTypeDef send_IMU_config_to_sensor(void) {
 		  imu_setup.config.imu_opr_mode == IMU_OPR_MODE_NDOF)) {
 
 			//TODO: fix weird dereferencing
-			status |= set_IMU_page(IMU_PAGE_1);
-			status |= set_IMU_accel_config(&(imu_setup.config.accel));
-			status |= set_IMU_gyro_config(&(imu_setup.config.gyro));
-			status |= set_IMU_mag_config(&(imu_setup.config.mag));
-			status |= set_IMU_page(IMU_PAGE_0);
+			status |= IMU_set_page(IMU_PAGE_1);
+			status |= IMU_set_accel_config(&(imu_setup.config.accel));
+			status |= IMU_set_gyro_config(&(imu_setup.config.gyro));
+			status |= IMU_set_mag_config(&(imu_setup.config.mag));
+			status |= IMU_set_page(IMU_PAGE_0);
 		}
-		status |= set_IMU_operation_mode(imu_setup.config.imu_opr_mode);
+		status |= IMU_set_operation_mode(imu_setup.config.imu_opr_mode);
 		return status;
 }
 
-
-HAL_StatusTypeDef set_IMU_operation_mode(IMU_OprMode_t operation_mode) {
+//TODO: put 20ms config mode delay in this function, so don't have to remember every time config mode is enabled
+HAL_StatusTypeDef IMU_set_operation_mode(IMU_OprMode_t operation_mode) {
 	HAL_StatusTypeDef status;
 	uint8_t opr_reg;
 
-	status = read_IMU_register(IMU_REG_OPR_MODE, &opr_reg,1);
+	status = IMU_read_register(IMU_REG_OPR_MODE, &opr_reg,1);
 	if (status != HAL_OK) {
 		return status;
 	}
 	opr_reg &= ~IMU_OPR_MODE_MASK;
 	opr_reg |= operation_mode;
-	status = write_IMU_register(IMU_REG_OPR_MODE, &opr_reg);
+	status = IMU_write_register(IMU_REG_OPR_MODE, &opr_reg);
 	return status;
 }
 
 
-HAL_StatusTypeDef set_IMU_units(void) {
+HAL_StatusTypeDef IMU_set_units(void) {
 	uint8_t unit_sel_reg;
 
-	HAL_StatusTypeDef status = read_IMU_register(IMU_REG_UNIT_SEL, &unit_sel_reg, 1);
+	HAL_StatusTypeDef status = IMU_read_register(IMU_REG_UNIT_SEL, &unit_sel_reg, 1);
 
 	if (status != HAL_OK) {
 		return status;
@@ -144,7 +139,7 @@ HAL_StatusTypeDef set_IMU_units(void) {
 
 	unit_sel_reg |= (IMU_ACCEL_UNITS | IMU_ANGULAR_RATE_UNITS | IMU_EULER_ANGLE_UNITS | IMU_TEMP_UNITS);
 
-	status = write_IMU_register(IMU_REG_UNIT_SEL, &unit_sel_reg);
+	status = IMU_write_register(IMU_REG_UNIT_SEL, &unit_sel_reg);
 	return status;
 
 }
@@ -152,7 +147,7 @@ HAL_StatusTypeDef set_IMU_units(void) {
 *           Individual Sensor Config             *
 **************************************************/
 //accelerometer
-HAL_StatusTypeDef set_IMU_accel_config(IMU_AccelConfig_t* accel_config){
+HAL_StatusTypeDef IMU_set_accel_config(IMU_AccelConfig_t* accel_config){
 	HAL_StatusTypeDef status;
 	uint8_t accel_range_flags = accel_config->range;
 	uint8_t accel_bandwidth_flags = ((accel_config->bandwidth) << 2);
@@ -161,18 +156,18 @@ HAL_StatusTypeDef set_IMU_accel_config(IMU_AccelConfig_t* accel_config){
 	uint8_t tx_buf = accel_range_flags | accel_bandwidth_flags | accel_opr_mode_flags;
 
 
-	status = write_IMU_register(IMU_REG_ACC_CONFIG, &tx_buf);
+	status = IMU_write_register(IMU_REG_ACC_CONFIG, &tx_buf);
 	return status;
 }
 
 //gyro range and bandwidth go in gyro_config register 0 and gyro_power mode goes in gyro_config register 1
 // higest 2 bits in gyro_config register 0 reserved
 // highest 5 bits in gyro_config register 1 reserved
-HAL_StatusTypeDef set_IMU_gyro_config(IMU_GyroConfig_t* gyro_config) {
+HAL_StatusTypeDef IMU_set_gyro_config(IMU_GyroConfig_t* gyro_config) {
 	HAL_StatusTypeDef status;
 	uint8_t gyro_config_reg[2];
 
-	status = read_IMU_register(IMU_REG_GYR_CONFIG_0, gyro_config_reg,2);
+	status = IMU_read_register(IMU_REG_GYR_CONFIG_0, gyro_config_reg,2);
 	if (status != HAL_OK) {
 		return status;
 	}
@@ -188,24 +183,24 @@ HAL_StatusTypeDef set_IMU_gyro_config(IMU_GyroConfig_t* gyro_config) {
 	gyro_config_reg[0] &= ~(IMU_GYR_CONFIG_0_MASK);
 	gyro_config_reg[0] |= reg_0_combined_flags;
 	//gyro_config_reg is a pointer to first item in the array, which is reg 0
-	status = write_IMU_register(IMU_REG_GYR_CONFIG_0, gyro_config_reg);
+	status = IMU_write_register(IMU_REG_GYR_CONFIG_0, gyro_config_reg);
 	if (status != HAL_OK) {
 		return status;
 	}
 
 	gyro_config_reg[1] &= ~(IMU_GYR_CONFIG_1_MASK);
 	gyro_config_reg[1] |= gyro_opr_mode_flags;
-	status = write_IMU_register(IMU_REG_GYR_CONFIG_1, &gyro_config_reg[1]);
+	status = IMU_write_register(IMU_REG_GYR_CONFIG_1, &gyro_config_reg[1]);
 	return status;
 }
 
-HAL_StatusTypeDef set_IMU_mag_config(IMU_MagConfig_t* mag_config) {
+HAL_StatusTypeDef IMU_set_mag_config(IMU_MagConfig_t* mag_config) {
 	HAL_StatusTypeDef status;
 	uint8_t mag_config_reg;
 
 	uint8_t mag_config_flags = (mag_config->data_rate | ((mag_config->opr_mode) << 3) | ((mag_config->pwr_mode) << 5));
 
-	status = read_IMU_register(IMU_REG_MAG_CONFIG, &mag_config_reg, 1);
+	status = IMU_read_register(IMU_REG_MAG_CONFIG, &mag_config_reg, 1);
 	if (status != HAL_OK) {
 		return status;
 	}
@@ -213,7 +208,7 @@ HAL_StatusTypeDef set_IMU_mag_config(IMU_MagConfig_t* mag_config) {
 	mag_config_reg &= ~(IMU_MAG_CONFIG_MASK);
 	mag_config_reg |= (mag_config_flags);
 
-	status = write_IMU_register(IMU_REG_MAG_CONFIG, &mag_config_reg);
+	status = IMU_write_register(IMU_REG_MAG_CONFIG, &mag_config_reg);
 	return status;
 }
 
@@ -228,9 +223,9 @@ HAL_StatusTypeDef IMU_remap_axes(void) {
 /*Status for all sensors & entire system is stored in one register. 
 * sys_status is highest two bits, gyro_status is next two, accel_status is next two, mag_status is lowest two
 */
-HAL_StatusTypeDef check_IMU_calibration_status(void) {
+HAL_StatusTypeDef IMU_check_calibration_status(void) {
 	uint8_t calib_reg;
-	HAL_StatusTypeDef status = read_IMU_register(IMU_REG_CALIB_STAT, &calib_reg, 1);
+	HAL_StatusTypeDef status = IMU_read_register(IMU_REG_CALIB_STAT, &calib_reg, 1);
 	if (status != HAL_OK) {
 		return status;
 	}
@@ -263,7 +258,7 @@ HAL_StatusTypeDef IMU_get_euler_data(float* EUL_heading, float* EUL_roll, float*
 	uint8_t euler_data[6];
 	// read all registers at once for speed
 
-	status = read_IMU_register(IMU_REG_EUL_DATA_X_LSB, euler_data, 6);
+	status = IMU_read_register(IMU_REG_EUL_DATA_X_LSB, euler_data, 6);
 	if (status != HAL_OK) {
 		return status;
 	}
@@ -283,7 +278,7 @@ HAL_StatusTypeDef IMU_get_quat_data(float* QUAT_w, float* QUAT_x, float* QUAT_y,
 	HAL_StatusTypeDef status;
 	uint8_t quat_data[8];
 
-	status = read_IMU_register(IMU_REG_QUA_DATA_W_LSB, quat_data, 8);
+	status = IMU_read_register(IMU_REG_QUA_DATA_W_LSB, quat_data, 8);
 	if (status != HAL_OK) {
 		return status;
 	}
@@ -305,7 +300,7 @@ HAL_StatusTypeDef IMU_get_quat_data(float* QUAT_w, float* QUAT_x, float* QUAT_y,
 HAL_StatusTypeDef IMU_get_gyro_rawdata(float *pitch, float *roll, float *yaw) {
 	HAL_StatusTypeDef status;
 	uint8_t gyr_data[6];
-	status = read_IMU_register(IMU_REG_GYR_DATA_X_LSB, gyr_data, 6);
+	status = IMU_read_register(IMU_REG_GYR_DATA_X_LSB, gyr_data, 6);
 	if (status != HAL_OK) {
 		return status;
 	}
@@ -325,7 +320,7 @@ HAL_StatusTypeDef IMU_get_accel_rawdata(float* accel_x, float* accel_y, float* a
 	HAL_StatusTypeDef status;
 	uint8_t accel_rawdata[6];
 
-	status = read_IMU_register(IMU_ACC_DATA_X_LSB, accel_rawdata, 6);
+	status = IMU_read_register(IMU_ACC_DATA_X_LSB, accel_rawdata, 6);
 	if (status != HAL_OK) {
 		return status;
 	}
@@ -346,7 +341,7 @@ HAL_StatusTypeDef IMU_get_grav_data(float* grav_x, float* grav_y, float* grav_z)
 	HAL_StatusTypeDef status;
 	uint8_t grav_rawdata[6];
 
-	status = read_IMU_register(IMU_REG_GRV_DATA_X_LSB, grav_rawdata, 6);
+	status = IMU_read_register(IMU_REG_GRV_DATA_X_LSB, grav_rawdata, 6);
 	if (status != HAL_OK) {
 		return status;
 	}
@@ -366,7 +361,7 @@ HAL_StatusTypeDef IMU_get_lin_accel_data(float* linaccel_x, float* linaccel_y, f
 	HAL_StatusTypeDef status;
 	uint8_t linaccel_rawdata[6];
 
-	status = read_IMU_register(IMU_REG_LIA_DATA_X_LSB, linaccel_rawdata,6);
+	status = IMU_read_register(IMU_REG_LIA_DATA_X_LSB, linaccel_rawdata,6);
 	if (status != HAL_OK) {
 		return status;
 	}
@@ -384,10 +379,26 @@ HAL_StatusTypeDef IMU_get_lin_accel_data(float* linaccel_x, float* linaccel_y, f
 
 HAL_StatusTypeDef IMU_get_chipID(uint8_t* chipID) {
 	HAL_StatusTypeDef status;
-	status = read_IMU_register(IMU_REG_CHIP_ID, chipID,1);
+	status = IMU_read_register(IMU_REG_CHIP_ID, chipID,1);
 	if (status != HAL_OK) {
 		return status;
 	}
 
 	return status;
+}
+
+//TODO: move config mode delay into set_operation_mode function
+HAL_StatusTypeDef IMU_enable_external_oscillator(void) {
+	uint8_t sys_trig_buf;
+	//datasheet recommends only switching to external oscillator in config mode
+	IMU_set_operation_mode(IMU_OPR_MODE_CONFIGMODE);
+	HAL_Delay(20);
+
+	HAL_StatusTypeDef status = IMU_read_register(IMU_REG_SYS_TRIGGER, &sys_trig_buf, 1);
+	sys_trig_buf |= IMU_CLK_SEL_EN;
+
+	status = IMU_write_register(IMU_REG_SYS_TRIGGER, &sys_trig_buf);
+	//changing to external crystal requires 600ms startup time
+	HAL_Delay(600);
+	return status; 
 }
