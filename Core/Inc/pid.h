@@ -13,17 +13,17 @@
 #include <stdint.h>
 #include "IMU_Model.h"
 
-#define PID_PITCH_KP 0
-#define PID_PITCH_KI 0
-#define PID_PITCH_KD 0
+#define PID_PITCH_KP 8
+#define PID_PITCH_KI 8
+#define PID_PITCH_KD 8
 
-#define PID_ROLL_KP 0
-#define PID_ROLL_KI 0
-#define PID_ROLL_KD 0
+#define PID_ROLL_KP 8
+#define PID_ROLL_KI 8
+#define PID_ROLL_KD 8
 
-#define PID_YAW_KP 0
-#define PID_YAW_KI 0
-#define PID_YAW_KD 0
+#define PID_YAW_KP 8
+#define PID_YAW_KI 8
+#define PID_YAW_KD 8
 
 //dshot throttle ranges from 48 to 2048; 2000 steps
 #define PID_OUTPUT_MAX 2048
