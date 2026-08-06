@@ -65,7 +65,7 @@ void set_loop_rate(uint32_t loop_rate_hz) {
   uint32_t tim_clk = MAIN_LOOP_TIM_CLK;
 
   uint16_t tim_PSC = lrintf((float) tim_clk / LOOP_TIM_TICK_RATE_HZ) - 1;
-  uint32_t tim_ARR = loop_rate_hz / LOOP_TIM_TICK_RATE_HZ;
+  uint32_t tim_ARR =  LOOP_TIM_TICK_RATE_HZ / loop_rate_hz;
 
   __HAL_TIM_SET_PRESCALER(MAIN_LOOP_TIM, tim_PSC);
   __HAL_TIM_SET_AUTORELOAD(MAIN_LOOP_TIM, tim_ARR);
@@ -90,6 +90,7 @@ int main(void)
 
   /* USER CODE BEGIN 1 */
   IMU_Model_t imu_model;
+  //write all ones to ibus_data array so that 
   uint16_t ibus_data[IBUS_NUM_CHANNELS];
   uint16_t esc_commands[4] = {0};
   /* USER CODE END 1 */
@@ -143,16 +144,18 @@ int main(void)
 
       IMU_update_model(&imu_model);
       ibus_read_as_percents(ibus_data);
-      ibus_failsafe_check(ibus_data);
+      //failsafe check sets all inputs to zero
 
-      if (ibus_is_armed(ibus_data)) {
-
+      if (ibus_failsafe_check(ibus_data) && ibus_is_armed(ibus_data)) {
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
+        uint16_t arm_test_output[4] = {800, 800, 800, 800};
         pid_update(&imu_model, ibus_data, esc_commands);
-        dshot_write_from_percents(esc_commands);
+        dshot_write_from_percents(arm_test_output);
 
       } else {
         //send zero throttle signal if quadcopter is disarmed
-        dshot_write_zeroes();
+        dshot_disarm();
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
       }
     }
   } 
