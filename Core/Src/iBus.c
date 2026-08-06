@@ -21,7 +21,7 @@ void ibus_init(UART_HandleTypeDef* huart) {
     HAL_UART_Receive_DMA(huart, uart_buf, IBUS_FRAME_SIZE);
 }
 
-bool ibus_read(uint16_t* ibus_data) {
+bool ibus_read_raw(uint16_t* ibus_data) {
     if (!ibus_verify_start()) {
         return false;
     }
@@ -38,18 +38,20 @@ bool ibus_read(uint16_t* ibus_data) {
 //convert ibus channel data into a number between 0 and 1000 (effectively a percent without using floats)
 bool ibus_read_as_percents(uint16_t* ibus_data_percents) {
     uint16_t ibus_data[IBUS_NUM_CHANNELS];
-    if (!ibus_read(ibus_data)) {
+    if (!ibus_read_raw(ibus_data)) {
         return false;
     }
     for (int i = 0; i < IBUS_NUM_CHANNELS; i++) {
-        ibus_data[i] -= 1000;
+        ibus_data_percents[i] = ibus_data[i] - 1000;
     }
     return true;
 }
 
-bool ibus_is_armed(const uint16_t* ibus_data) {
+
+bool ibus_is_armed(const uint16_t* ibus_data_percents) {
     // switch down state is armed, up is disarmed. 
-    return ibus_data[5] == 0;
+
+    return ibus_data_percents[4] == 1000;
 }
 
 // ibus_data is an array where each index in the array represents a channel whose value is between 1000 and 2000
@@ -59,17 +61,19 @@ static void ibus_update(uint16_t* ibus_data) {
     }
 }
 
-void ibus_failsafe_check(uint16_t* ibus_data) {
+bool ibus_failsafe_check(uint16_t* ibus_data) {
 
     failsafe_flag_count++;
 
     if (failsafe_flag_count <= IBUS_FAILSAFE_MAX) {
-        return;
+        return true;
     } else {
         for (int i = 0; i < IBUS_NUM_CHANNELS; i++) {
             ibus_data[i] = 0;
+            return false;
         }
     }
+    return false;
 }
 
 static bool ibus_verify_start(void) {

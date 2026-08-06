@@ -38,7 +38,7 @@ void ibus_init(UART_HandleTypeDef* huart);
  * Modifies: 
  * Effects: 
  */
-bool ibus_read(uint16_t* ibus_data);
+bool ibus_read_raw(uint16_t* ibus_data);
 
 /*
 Does same thing as ibus_read, but outputs data for each channel as a number between 0 and 1000, rather than between 
@@ -51,23 +51,23 @@ Does same thing as ibus_read, but outputs data for each channel as a number betw
 bool ibus_read_as_percents(uint16_t* ibus_data_percents);
 
 /* 
- * Requires: ibus_data has filled with ibus data in percent form
+ * Requires: ibus_data has filled with ibus data in *percent* form
  * Modifies: nothing
  * Effects: checks if channel 5 of ibus transmission is low or high. If it is low, then the quadcopter is armed so
             return true. Otherwise, return false.
  */
 bool ibus_is_armed(const uint16_t* ibus_data_percents);
 /*
- * Requires: 
- * Modifies: 
- * Effects: 
+ * Requires: HAL_UART_RxCpltCallback function is implemented to reset failsafe flag every time it is triggered
+ * Modifies: ibus_data
+ * Effects: Failsafe for if reciever packets are stale (does not cover transmitter power loss). Sets all channels to zero
  */
-void ibus_failsafe_check(uint16_t* ibus_data);
+bool ibus_failsafe_check(uint16_t* ibus_data);
 
 /*
- * Requires: 
- * Modifies: 
- * Effects: 
+ * Requires: failsafe flag counter has been initialized
+ * Modifies: failsafe flag counter
+ * Effects: Resets failsafe flag count to zero. Call from within HAL_UART_RxCpltCallback
  */
 void ibus_reset_failsafe(void);
 
