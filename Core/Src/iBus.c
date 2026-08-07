@@ -67,12 +67,12 @@ bool ibus_failsafe_check(uint16_t* ibus_data) {
 
     if (failsafe_flag_count <= IBUS_FAILSAFE_MAX) {
         return true;
-    } else {
-        for (int i = 0; i < IBUS_NUM_CHANNELS; i++) {
-            ibus_data[i] = 0;
-            return false;
-        }
     }
+
+    for (int i = 0; i < IBUS_NUM_CHANNELS; i++) {
+        ibus_data[i] = 0;
+    }
+    
     return false;
 }
 
