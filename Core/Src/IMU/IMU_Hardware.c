@@ -12,6 +12,7 @@
 #include "IMU_Hardware.h"
 #include "IMU_Config.h"
 #include "main.h"
+#include "stm32f4xx_hal_conf.h"
 #include "stm32f4xx_hal_def.h"
 #include <stdbool.h>
 //TODO: update resolution settings - disregard non-included bits
@@ -52,6 +53,23 @@ HAL_StatusTypeDef IMU_set_page(IMU_Page_Sel_t page_num) {
 /*************************************************
 *           IMU Overall Configuration            *
 **************************************************/
+//TODO: move config mode delay into set_operation_mode function
+HAL_StatusTypeDef IMU_enable_external_oscillator(void) {
+	uint8_t sys_trig_buf;
+
+
+	HAL_StatusTypeDef status = IMU_read_register(IMU_REG_SYS_TRIGGER, &sys_trig_buf, 1);
+	if (status != HAL_OK) {
+		return status;
+	}
+	sys_trig_buf |= IMU_CLK_SEL_EN;
+
+	status = IMU_write_register(IMU_REG_SYS_TRIGGER, &sys_trig_buf);
+	//changing to external crystal requires 600ms startup time
+	HAL_Delay(600);
+	return status; 
+}
+
 //consider changing to be preprocessor based
 HAL_StatusTypeDef IMU_default_config(void) {
 	HAL_StatusTypeDef status;
@@ -84,10 +102,13 @@ HAL_StatusTypeDef IMU_send_config_to_sensor(void) {
 	// TODO: check if setting config mode induces a delay in sensor data; is 
 	// config mode necessary
 
-	//|= logic ensures that function will keep writing to registers even if one of the writes fails
+
 	HAL_StatusTypeDef status;
 	status = IMU_set_page(IMU_PAGE_0);
 	status  |= IMU_set_operation_mode(IMU_OPR_MODE_CONFIGMODE);
+	if (status != HAL_OK) {
+		return status;
+	}
 	//datasheet requires 19ms switching time when switching to config mode
 	HAL_Delay(20);
 	// skip setting power mode because it will always be normal mode
@@ -100,13 +121,31 @@ HAL_StatusTypeDef IMU_send_config_to_sensor(void) {
 		  imu_setup.config.imu_opr_mode == IMU_OPR_MODE_NDOF)) {
 
 			//TODO: fix weird dereferencing
-			status |= IMU_set_page(IMU_PAGE_1);
-			status |= IMU_set_accel_config(&(imu_setup.config.accel));
-			status |= IMU_set_gyro_config(&(imu_setup.config.gyro));
-			status |= IMU_set_mag_config(&(imu_setup.config.mag));
-			status |= IMU_set_page(IMU_PAGE_0);
+			status = IMU_set_page(IMU_PAGE_1);
+			if (status != HAL_OK) {
+				return status;
+			}
+			status = IMU_set_accel_config(&(imu_setup.config.accel));
+			if (status != HAL_OK) {
+				return status;
+			}			
+			status = IMU_set_gyro_config(&(imu_setup.config.gyro));
+			if (status != HAL_OK) {
+				return status;
+			}
+			status = IMU_set_mag_config(&(imu_setup.config.mag));
+			if (status != HAL_OK) {
+				return status;
+			}
+			status = IMU_set_page(IMU_PAGE_0);
+			if (status != HAL_OK) {
+				return status;
+			}
 		}
-		status |= IMU_set_operation_mode(imu_setup.config.imu_opr_mode);
+		status = IMU_set_operation_mode(imu_setup.config.imu_opr_mode);
+		// switching from config mode to any other operation mode requires 7ms delay, but add a few extra ms just in case
+		// initialization is not time sensitive, but it is bad if sensor is misconfigured, so add margin for error
+		HAL_Delay(10);
 		return status;
 }
 
@@ -119,6 +158,12 @@ HAL_StatusTypeDef IMU_set_operation_mode(IMU_OprMode_t operation_mode) {
 	if (status != HAL_OK) {
 		return status;
 	}
+
+	//check if already in selected operation mode (first four bits are reserved, so only check lower four)
+	if ((opr_reg & 0x0F) == operation_mode) {
+		return status;
+	}
+
 	opr_reg &= ~IMU_OPR_MODE_MASK;
 	opr_reg |= operation_mode;
 	status = IMU_write_register(IMU_REG_OPR_MODE, &opr_reg);
@@ -143,6 +188,7 @@ HAL_StatusTypeDef IMU_set_units(void) {
 	return status;
 
 }
+
 /*************************************************
 *           Individual Sensor Config             *
 **************************************************/
@@ -154,7 +200,6 @@ HAL_StatusTypeDef IMU_set_accel_config(IMU_AccelConfig_t* accel_config){
 	uint8_t accel_opr_mode_flags = ((accel_config->opr_mode) << 5);
 
 	uint8_t tx_buf = accel_range_flags | accel_bandwidth_flags | accel_opr_mode_flags;
-
 
 	status = IMU_write_register(IMU_REG_ACC_CONFIG, &tx_buf);
 	return status;
@@ -212,10 +257,38 @@ HAL_StatusTypeDef IMU_set_mag_config(IMU_MagConfig_t* mag_config) {
 	return status;
 }
 
-//TODO: Implement
-HAL_StatusTypeDef IMU_remap_axes(void) {
-	return HAL_OK;
+
+HAL_StatusTypeDef IMU_remap_axes(IMU_Axis_t remap_x_value, IMU_Axis_t remap_y_value, IMU_Axis_t remap_z_value) {
+	uint8_t axis_map_config_buf;
+	HAL_StatusTypeDef status = IMU_read_register(IMU_REG_AXIS_MAP_CONFIG, &axis_map_config_buf, 1);
+
+	if (status != HAL_OK) {
+		return status;
+	}
+	//consider replacing with a single mask constant. done as three for readability
+	axis_map_config_buf &= ~(NEW_X_AXIS_MASK | NEW_Y_AXIS_MASK | NEW_Z_AXIS_MASK);
+
+	axis_map_config_buf |= (remap_z_value << IMU_REMAP_Z_SHIFT | remap_y_value << IMU_REMAP_Y_SHIFT | remap_x_value << IMU_REMAP_X_SHIFT);
+
+	status = IMU_write_register(IMU_REG_AXIS_MAP_CONFIG, &axis_map_config_buf);
+	return status;
 }
+
+HAL_StatusTypeDef IMU_change_axis_signs(IMU_Axis_Sign_t x_sign, IMU_Axis_Sign_t y_sign, IMU_Axis_Sign_t z_sign) {
+	uint8_t axis_map_sign_buf;
+	HAL_StatusTypeDef status = IMU_read_register(IMU_REG_AXIS_MAP_SIGN, &axis_map_sign_buf, 1);
+
+	if (status != HAL_OK) {
+		return status;
+	}
+	axis_map_sign_buf &= ~(IMU_AXIS_X_SIGN_MASK | IMU_AXIS_Y_SIGN_MASK | IMU_AXIS_Z_SIGN_MASK);
+
+	axis_map_sign_buf |= (x_sign << IMU_AXIS_X_SIGN_SHIFT | y_sign << IMU_AXIS_Y_SIGN_SHIFT | z_sign << IMU_AXIS_Z_SIGN_SHIFT);
+
+	status = IMU_write_register(IMU_REG_AXIS_MAP_SIGN, &axis_map_sign_buf);
+	return status; 
+}
+
 /*************************************************
 *              Sensor Calibration                *
 **************************************************/
@@ -387,18 +460,3 @@ HAL_StatusTypeDef IMU_get_chipID(uint8_t* chipID) {
 	return status;
 }
 
-//TODO: move config mode delay into set_operation_mode function
-HAL_StatusTypeDef IMU_enable_external_oscillator(void) {
-	uint8_t sys_trig_buf;
-	//datasheet recommends only switching to external oscillator in config mode
-	IMU_set_operation_mode(IMU_OPR_MODE_CONFIGMODE);
-	HAL_Delay(20);
-
-	HAL_StatusTypeDef status = IMU_read_register(IMU_REG_SYS_TRIGGER, &sys_trig_buf, 1);
-	sys_trig_buf |= IMU_CLK_SEL_EN;
-
-	status = IMU_write_register(IMU_REG_SYS_TRIGGER, &sys_trig_buf);
-	//changing to external crystal requires 600ms startup time
-	HAL_Delay(600);
-	return status; 
-}

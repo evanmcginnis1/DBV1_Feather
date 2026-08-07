@@ -90,6 +90,29 @@ typedef enum {
 //page 0
 #define IMU_REG_SYS_TRIGGER 0x3F
 #define IMU_CLK_SEL_EN 0x80
+
+//page 0
+#define IMU_REG_AXIS_MAP_CONFIG 0x41
+#define IMU_REG_AXIS_MAP_SIGN 0x42
+
+#define IMU_REMAP_X_SHIFT 0
+#define IMU_REMAP_Y_SHIFT 2
+#define IMU_REMAP_Z_SHIFT 4
+
+#define NEW_X_AXIS_MASK (0x03 << IMU_REMAP_X_SHIFT)
+#define NEW_Y_AXIS_MASK (0x03 << IMU_REMAP_Y_SHIFT)
+#define NEW_Z_AXIS_MASK (0x03 << IMU_REMAP_Z_SHIFT)
+
+#define IMU_AXIS_X_SIGN_SHIFT 2
+#define IMU_AXIS_Y_SIGN_SHIFT 1
+#define IMU_AXIS_Z_SIGN_SHIFT 0
+
+#define IMU_AXIS_X_SIGN_MASK (0x01 << IMU_AXIS_X_SIGN_SHIFT)
+#define IMU_AXIS_Y_SIGN_MASK (0x01 << IMU_AXIS_Y_SIGN_SHIFT)
+#define IMU_AXIS_Z_SIGN_MASK (0x01 << IMU_AXIS_Z_SIGN_SHIFT)
+
+
+
 /*************************************************
 *             IMU Data Registers              *
 **************************************************/
@@ -166,6 +189,16 @@ typedef enum {
 *             Sensor Configuration Options       *
 **************************************************/
 
+typedef enum {
+    IMU_AXIS_X = 0b00, 
+    IMU_AXIS_Y = 0b01,
+    IMU_AXIS_Z = 0b10,
+} IMU_Axis_t;
+
+typedef enum {
+    IMU_AXIS_SIGN_POSITIVE = 0,
+    IMU_AXIS_SIGN_NEGATIVE = 1,
+} IMU_Axis_Sign_t;
 /*
     IMU_OPR_MODE_CONFIGMODE = 0x00,
     IMU_OPR_MODE_ACCONLY = 0x01,
@@ -487,8 +520,8 @@ HAL_StatusTypeDef IMU_set_gyro_config(IMU_GyroConfig_t* gyro_config);
 */
 HAL_StatusTypeDef IMU_set_mag_config(IMU_MagConfig_t* mag_config);
 
-HAL_StatusTypeDef IMU_remap_axes(void);
-
+HAL_StatusTypeDef IMU_remap_axes(IMU_Axis_t remap_x_value, IMU_Axis_t remap_y_value, IMU_Axis_t remap_z_value);
+HAL_StatusTypeDef IMU_change_axis_signs(IMU_Axis_Sign_t x_sign, IMU_Axis_Sign_t y_sign, IMU_Axis_Sign_t z_sign);
 /*************************************************
 *              Sensor Calibration                *
 **************************************************/
@@ -544,7 +577,7 @@ HAL_StatusTypeDef IMU_get_gyro_rawdata(float* pitch, float* roll, float* yaw);
 HAL_StatusTypeDef IMU_get_chipID(uint8_t* chipID);
 
 /*
- * Requires: External oscillator is connected to IMU
+ * Requires: External oscillator is connected to IMU. Ensure IMU is already in configuration mode
  * Modifies: IMU_SYS_TRIGGER register
  * Effects: Sets IMU to use an external oscillator for its clock
  */
