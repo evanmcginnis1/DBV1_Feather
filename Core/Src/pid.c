@@ -126,6 +126,7 @@ static void pid_step(PID_t* pid_info, const float* actual_val, const float* setp
     *output = lrintf(p + i + d);
 
     pid_info->prev_error = error;
+    pid_info->accumulated_error += pid_info->new_accum_error;
 }
 
 //map pilot axis input to a number between 0 and 180.
@@ -138,19 +139,19 @@ static void pid_step(PID_t* pid_info, const float* actual_val, const float* setp
 /*
 Requires: pilot_command is an array of input values in percent form, each between 0 and 1000
 Modifies: setpoint array
-Effects: Converts pilot_command percentages into degrees (0-180) and leaves throttle value between 0-1000
+Effects: Converts pilot_command percentages into degrees/dps and leaves throttle value between 0-1000
 */
 static void pilot_command_to_setpoint(const uint16_t* pilot_command, float* setpoint) {
     //axis commands
 
-    //roll
-    setpoint[0] = (pilot_command[0] / 1000.0f) * 180;
-    //pitch
-    setpoint[1] = (pilot_command[1] / 1000.0f) * 180;
-    //yaw
-    setpoint[3] = (pilot_command[3] / 1000.0f) * 180;
+    //roll - should map to value between -90 and +90
+    setpoint[0] = ((pilot_command[0] - 500) / 500.0f) * PID_MAX_ROLL_ANGLE_INPUT;
+    //pitch - should map to value between -90 and +90
+    setpoint[1] = ((pilot_command[1] - 500) / 500.0f) * PID_MAX_PITCH_ANGLE_INPUT;
+    //yaw - should map to a value between -500 and 500
+    setpoint[3] = ((pilot_command[3] - 500) / 500.0f) * PID_MAX_YAW_RATE_INPUT;
 
-    //throttle command normalized to a value between 0 and 1
+    //throttle command stays as a value between 0 and 1000
     setpoint[2] = pilot_command[2];
 }
 
