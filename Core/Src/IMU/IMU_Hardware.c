@@ -65,8 +65,8 @@ HAL_StatusTypeDef IMU_enable_external_oscillator(void) {
 	sys_trig_buf |= IMU_CLK_SEL_EN;
 
 	status = IMU_write_register(IMU_REG_SYS_TRIGGER, &sys_trig_buf);
-	//changing to external crystal requires 600ms startup time
-	HAL_Delay(600);
+	//changing to external crystal requires 600ms startup time (give extra 50ms buffer)
+	HAL_Delay(650);
 	return status; 
 }
 
