@@ -9,7 +9,7 @@
 
  //TODO: Make functions static
 
-#include "IMU_Hardware.h"
+#include "BNO055_Hardware.h"
 #include "IMU_Config.h"
 #include "main.h"
 #include "stm32f4xx_hal_conf.h"
