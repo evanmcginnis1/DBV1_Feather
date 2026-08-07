@@ -30,6 +30,12 @@
 #define PID_FLIGHT_OUTPUT_MIN 48
 #define PID_OUTPUT_IDLE 1000
 
+
+#define PID_MAX_YAW_RATE_INPUT 500
+//euler angle lockup at 45 degrees; not high performance, so don't need huge angles
+#define PID_MAX_PITCH_ANGLE_INPUT 30
+#define PID_MAX_ROLL_ANGLE_INPUT 30
+
 #define PID_LOOP_RATE_HZ 100
 //pid constants are stored in a struct so that they can be updated on the fly
 typedef struct {
