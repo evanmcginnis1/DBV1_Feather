@@ -10,7 +10,7 @@
 
 #include <main.h>
 #include <IMU_Config.h>
-#include <IMU_Hardware.h>
+#include <BNO055_Hardware.h>
 #include <IMU_Model.h>
 
 

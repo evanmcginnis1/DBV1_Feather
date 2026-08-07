@@ -10,7 +10,7 @@
 #ifndef SRC_IMU_CONFIG_H_
 #define SRC_IMU_CONFIG_H_
 
-#include "IMU_Hardware.h"
+#include "BNO055_Hardware.h"
 
 /*****************************
  * IMU SENSOR DEFAULT CONFIG *
