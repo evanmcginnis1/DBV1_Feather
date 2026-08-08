@@ -49,9 +49,9 @@ typedef struct {
 } PID_t;
 
 typedef struct {
-    uint16_t pitch_pct;
-    uint16_t roll_pct;
-    uint16_t yaw_pct;
+    int16_t pitch_pct;
+    int16_t roll_pct;
+    int16_t yaw_pct;
 } Pid_Output_t;
 
 // struct implemented for better code clarity

@@ -18,6 +18,11 @@ static PID_t pid_pitch_info;
 static PID_t pid_yaw_info;
 static Pid_Output_t pid_axis_out_pct;
 
+static int8_t axis_synth_coeffs[4][3] = {{+1, +1, -1},
+                                   {+1, -1, +1}, 
+                                   {-1, +1, +1}, 
+                                   {-1, -1, -1}};
+
 // Static Functions
 /*
 Requires: pid_info is the specific PID_t object for the chosen axis. actual_val is the quadcopters current state, 
@@ -27,7 +32,7 @@ Modifies: updates prev_error term in given pid_info object with new error. updat
 Effects: calculates error, integrated error, and the rate of change of the error. Then, multiplies these with their 
          respective gain values and sums them. 
 */
-static void pid_step(PID_t* pid_info, const float* actual_val, const float* setpoint, uint16_t* output);
+static void pid_step(PID_t* pid_info, const float* actual_val, const float* setpoint, int16_t* output);
 /*
 Requires: imu has been updated with data from the imu. setpoint is an array of values representing degrees for pitch and
           roll and degrees per second for yaw.
@@ -113,11 +118,11 @@ static void pid_step_all(const IMU_Model_t* imu, const float* setpoint) {
     return;
 }
 
-//KP, KI, KD should be sized so that the output is an integer between 0 and 1000
-static void pid_step(PID_t* pid_info, const float* actual_val, const float* setpoint, uint16_t* output) {
+//KP, KI, KD should be sized so that the output is an integer between -1000 and 1000
+static void pid_step(PID_t* pid_info, const float* actual_val, const float* setpoint, int16_t* output) {
     float error = *setpoint - *actual_val;
     //new_accum_error is part of static struct so that integral clamp can be applied in separate function
-    pid_info->new_accum_error = error * (1.0  / PID_LOOP_RATE_HZ);
+    pid_info->new_accum_error = error * (1.0f / PID_LOOP_RATE_HZ);
 
     float p = error * pid_info->kp;
     float i = (pid_info->accumulated_error + pid_info->new_accum_error) * pid_info->ki;
@@ -161,11 +166,15 @@ static void synthesize_pid_commands(const float* throttle_command_pct, uint16_t*
     //synthesize commands
     //esc_command index corresponds to motor index on quadcopter
     int16_t signed_commands[4];
+    //roll, pitch, yaw
+    int16_t* temp_axis_commands[3] = {&pid_axis_out_pct.roll_pct, &pid_axis_out_pct.pitch_pct, &pid_axis_out_pct.yaw_pct};
 
-    signed_commands[0] = *throttle_command_pct + pid_axis_out_pct.roll_pct + pid_axis_out_pct.pitch_pct - pid_axis_out_pct.yaw_pct;
-    signed_commands[1] = *throttle_command_pct + pid_axis_out_pct.roll_pct - pid_axis_out_pct.pitch_pct + pid_axis_out_pct.yaw_pct;
-    signed_commands[2] = *throttle_command_pct - pid_axis_out_pct.roll_pct + pid_axis_out_pct.pitch_pct + pid_axis_out_pct.yaw_pct;
-    signed_commands[3] = *throttle_command_pct - pid_axis_out_pct.roll_pct - pid_axis_out_pct.pitch_pct - pid_axis_out_pct.yaw_pct;
+    for (int motor = 0; motor < 4; motor++) {
+        signed_commands[motor] = (int16_t)* throttle_command_pct;
+        for (int axis = 0; axis < 3; axis++) {
+            signed_commands[motor] += (*temp_axis_commands[axis] * axis_synth_coeffs[motor][axis]);
+        }
+    }
 
     check_integrator(signed_commands);
 
@@ -186,95 +195,24 @@ static void synthesize_pid_commands(const float* throttle_command_pct, uint16_t*
 }
 
 //lots of conditionals, but majority of them are nested and will not be called regularly. 
+//works by checking direction of overshoot, converting it to a signed value. Then, if accumulated error effective sign is the same as the 
+//overshoot direction, removes newly accumulated error
 static void check_integrator(int16_t* esc_commands_pct) {
-    if (esc_commands_pct[0] > 1000) {
-        if (pid_roll_info.accumulated_error > 0) {
-            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
+    PID_t* axis_info[3] = {&pid_roll_info, &pid_pitch_info, &pid_yaw_info};
+    int8_t direction = 0;
+    for (int motor = 0; motor < 4; motor++) {
+        direction = 0; 
+        if (esc_commands_pct[motor] > 1000) {
+            direction = 1;
+        } else if (esc_commands_pct[motor] < 0) {
+            direction = -1;
         }
-        if (pid_pitch_info.accumulated_error > 0) {
-            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
-        }
-
-        if (pid_yaw_info.accumulated_error < 0) {
-            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
-        }
-
-    } else if (esc_commands_pct[0] < 0) {
-        if (pid_yaw_info.accumulated_error > 0) {
-            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
-        }
-        if (pid_roll_info.accumulated_error < 0) {
-            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
-        }
-        if (pid_pitch_info.accumulated_error < 0) {
-            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
-        }
-    }
-
-    if (esc_commands_pct[1] > 1000) {
-        if (pid_roll_info.accumulated_error > 0) {
-            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
-        }
-        if (pid_yaw_info.accumulated_error > 0) {
-            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
-        }
-        if (pid_pitch_info.accumulated_error < 0) {
-            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
-        }
-    } else if (esc_commands_pct[1] < 0) {
-        if (pid_pitch_info.accumulated_error > 0) {
-            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
-        }
-        if (pid_roll_info.accumulated_error < 0) {
-            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
-        }
-        if (pid_yaw_info.accumulated_error < 0) {
-            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
-        }
-    }
-
-    if (esc_commands_pct[2] > 1000) {
-        if (pid_pitch_info.accumulated_error > 0) {
-            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
-        }
-        if (pid_yaw_info.accumulated_error > 0) {
-            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
-        }
-        if (pid_roll_info.accumulated_error < 0) {
-            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
-        }
-    } else if (esc_commands_pct[2] < 0) {
-        if (pid_roll_info.accumulated_error > 0) {
-            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
-        }
-        if (pid_pitch_info.accumulated_error < 0) {
-            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
-        }
-        if (pid_yaw_info.accumulated_error < 0) {
-            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
-        }
-    }
-
-    if (esc_commands_pct[3] > 1000) {
-        if (pid_pitch_info.accumulated_error < 0) {
-            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
-        }
-        if (pid_yaw_info.accumulated_error < 0) {
-            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
-        }
-        if (pid_roll_info.accumulated_error > 0) {
-            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
-        }
-    } 
-    else if (esc_commands_pct[3] < 0) {
-        if (pid_pitch_info.accumulated_error > 0) {
-            pid_pitch_info.accumulated_error -= pid_pitch_info.new_accum_error;
-        }
-        if (pid_yaw_info.accumulated_error > 0) {
-            pid_yaw_info.accumulated_error -= pid_yaw_info.new_accum_error;
-        }
-        if (pid_roll_info.accumulated_error > 0) {
-            pid_roll_info.accumulated_error -= pid_roll_info.new_accum_error;
+    
+        for (int axis = 0; axis < 3; axis++) {
+            //means that accumulated error is contributing to further error
+            if ((axis_info[axis]->accumulated_error * direction * axis_synth_coeffs[motor][axis]) > 0) {
+                axis_info[axis]->accumulated_error -= axis_info[axis]->new_accum_error;
+            }
         }
     }
 }
