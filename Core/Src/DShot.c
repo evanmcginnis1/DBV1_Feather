@@ -147,8 +147,8 @@ static void dshot_set_timers(dshot_type_e dshot_type) {
 
     //set Prescaler
     __HAL_TIM_SET_PRESCALER(MOTOR_1_TIM, dshot_prescaler_tim3);
-    __HAL_TIM_SET_PRESCALER(MOTOR_2_TIM, dshot_prescaler_tim3);
-    __HAL_TIM_SET_PRESCALER(MOTOR_3_TIM, dshot_prescaler_tim8);
+    __HAL_TIM_SET_PRESCALER(MOTOR_2_TIM, dshot_prescaler_tim8);
+    __HAL_TIM_SET_PRESCALER(MOTOR_3_TIM, dshot_prescaler_tim3);
     __HAL_TIM_SET_PRESCALER(MOTOR_4_TIM, dshot_prescaler_tim8);
 
     //set ARR
@@ -203,16 +203,16 @@ static void dshot_prepare_dma_all(const uint16_t* motor_throttles) {
 }
 
 static void dshot_start_dma(void) {
-    HAL_DMA_Start_IT(MOTOR_1_TIM->hdma[TIM_DMA_ID_CC1], (uint32_t) motor_1_dma_buf, (uint32_t) &MOTOR_1_TIM->Instance->CCR1, DSHOT_DMA_BUFFER_SIZE);
-    HAL_DMA_Start_IT(MOTOR_2_TIM->hdma[TIM_DMA_ID_CC2], (uint32_t) motor_2_dma_buf, (uint32_t) &MOTOR_2_TIM->Instance->CCR2, DSHOT_DMA_BUFFER_SIZE);
+    HAL_DMA_Start_IT(MOTOR_1_TIM->hdma[TIM_DMA_ID_CC2], (uint32_t) motor_1_dma_buf, (uint32_t) &MOTOR_1_TIM->Instance->CCR2, DSHOT_DMA_BUFFER_SIZE);
+    HAL_DMA_Start_IT(MOTOR_2_TIM->hdma[TIM_DMA_ID_CC1], (uint32_t) motor_2_dma_buf, (uint32_t) &MOTOR_2_TIM->Instance->CCR1, DSHOT_DMA_BUFFER_SIZE);
     HAL_DMA_Start_IT(MOTOR_3_TIM->hdma[TIM_DMA_ID_CC1], (uint32_t) motor_3_dma_buf, (uint32_t) &MOTOR_3_TIM->Instance->CCR1, DSHOT_DMA_BUFFER_SIZE);
     HAL_DMA_Start_IT(MOTOR_4_TIM->hdma[TIM_DMA_ID_CC2], (uint32_t) motor_4_dma_buf, (uint32_t) &MOTOR_4_TIM->Instance->CCR2, DSHOT_DMA_BUFFER_SIZE);
 }
 
 
 static void dshot_enable_dma_request(void) {
-	__HAL_TIM_ENABLE_DMA(MOTOR_1_TIM, TIM_DMA_CC1);
-	__HAL_TIM_ENABLE_DMA(MOTOR_2_TIM, TIM_DMA_CC2);
+	__HAL_TIM_ENABLE_DMA(MOTOR_1_TIM, TIM_DMA_CC2);
+	__HAL_TIM_ENABLE_DMA(MOTOR_2_TIM, TIM_DMA_CC1);
 	__HAL_TIM_ENABLE_DMA(MOTOR_3_TIM, TIM_DMA_CC1);
 	__HAL_TIM_ENABLE_DMA(MOTOR_4_TIM, TIM_DMA_CC2);
 }
@@ -242,8 +242,8 @@ static void dshot_dma_tc_callback(DMA_HandleTypeDef *hdma) {
 
 static void dshot_put_tc_callback_function(void) {
 	// TIM_DMA_ID_CCx depends on timer channel
-	MOTOR_1_TIM->hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dshot_dma_tc_callback;
-	MOTOR_2_TIM->hdma[TIM_DMA_ID_CC2]->XferCpltCallback = dshot_dma_tc_callback;
+	MOTOR_1_TIM->hdma[TIM_DMA_ID_CC2]->XferCpltCallback = dshot_dma_tc_callback;
+	MOTOR_2_TIM->hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dshot_dma_tc_callback;
 	MOTOR_3_TIM->hdma[TIM_DMA_ID_CC1]->XferCpltCallback = dshot_dma_tc_callback;
 	MOTOR_4_TIM->hdma[TIM_DMA_ID_CC2]->XferCpltCallback = dshot_dma_tc_callback;
 }
