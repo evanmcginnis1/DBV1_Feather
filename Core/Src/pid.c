@@ -12,16 +12,20 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <math.h>
+#include <gpio.h>
+#include <string.h>
+#include <usbd_cdc_if.h>
+
 
 static PID_t pid_roll_info;
 static PID_t pid_pitch_info;
 static PID_t pid_yaw_info;
 static Pid_Output_t pid_axis_out_pct;
 
-static int8_t axis_synth_coeffs[4][3] = {{+1, +1, -1},
-                                   {+1, -1, +1}, 
-                                   {-1, +1, +1}, 
-                                   {-1, -1, -1}};
+static int8_t axis_synth_coeffs[NUM_MOTORS][3] = {{+1, +1, -1},
+                                                  {+1, -1, +1}, 
+                                                  {-1, +1, +1}, 
+                                                  {-1, -1, -1}};
 
 // Static Functions
 /*
@@ -62,6 +66,9 @@ Effects:  Checks if esc command is greater than limit or less than minimum. If s
 */
 static void check_integrator(int16_t* esc_commands_pct);
 
+static void check_idle(int16_t* signed_commands);
+static void check_max(int16_t* signed_commands);
+
 void pid_init(void) {
     pid_roll_info.accumulated_error = 0;
     pid_roll_info.prev_error = 0;
@@ -82,6 +89,99 @@ void pid_init(void) {
     pid_yaw_info.kd = PID_YAW_KD;
 }
 
+/* Serial Command Options: (replace x with desired gain value )
+p_p x (pitch proportional)
+p_i x (pitch integrator gain)
+p_d x (pitch derivative gain)
+
+r_p x (roll)
+r_i x
+r_d x
+
+y_p x (yaw)
+y_i x
+y_d x
+*/
+void pid_update_gains(uint8_t* uart_buffer) {
+    uint8_t valid_command = 0;
+    uint8_t read_success = 0;
+    float new_gain = 0;
+    char new_gain_as_string[10];
+    // string should only ever be 3 characters long, plus one null terminator character
+    char target[4];
+
+    //limit to 15 characters to prevent buffer overflow, but don't ever expect a float that long
+    read_success = sscanf((char*)uart_buffer, "%3s %15f", target, &new_gain);
+    snprintf(new_gain_as_string, sizeof(new_gain_as_string) + 2, "%.3f \n", new_gain);
+
+    //protect against accidental dangerous gain values. Ignore if user tries to input invalid gain
+    if (new_gain < 0) {
+        CDC_Transmit_FS((uint8_t*)"Gain must be positive. Please try again.\n", 40);
+        return;
+    } else if (new_gain > 20) {
+        CDC_Transmit_FS((uint8_t*)"Gain must be less than 20. Please try again.\n", 44);
+        return;
+    }
+
+
+    if (!read_success) {
+        CDC_Transmit_FS((uint8_t*)"Invalid command. Please try again.\n", 36);
+        return;
+    }
+
+    if (target[0] == 'p') {
+        if (target[2] == 'p') {
+            pid_pitch_info.kp = new_gain;
+            valid_command = 1;
+            CDC_Transmit_FS((uint8_t*)"Updating pitch proportional gain to: ", 38);
+        } else if (target[2] == 'i') {
+            pid_pitch_info.ki = new_gain;
+            valid_command = 1;
+            CDC_Transmit_FS((uint8_t*)"Updating pitch integrator gain to: ", 36);
+        } else if (target[2] == 'd') {
+            pid_pitch_info.kd = new_gain;
+            valid_command = 1;
+            CDC_Transmit_FS((uint8_t*)"Updating pitch derivative gain to: ", 36);
+        }
+    } else if (target[0] == 'r') {
+        if (target[2] == 'p') {
+            valid_command = 1;
+            pid_roll_info.kp = new_gain;
+            CDC_Transmit_FS((uint8_t*)"Updating roll proportional gain to: ", 37);
+        } else if (target[2] == 'i') {
+            valid_command = 1;
+            pid_roll_info.ki = new_gain;
+            CDC_Transmit_FS((uint8_t*)"Updating roll integrator gain to: ", 35);
+        } else if (target[2] == 'd') {
+            valid_command = 1;
+            pid_roll_info.kd = new_gain;
+            CDC_Transmit_FS((uint8_t*)"Updating roll derivative gain to: ", 35);
+        }
+    } else if (target[0] == 'y') {
+        if (target[2] == 'p') {
+            valid_command = 1;
+            pid_yaw_info.kp = new_gain;
+            CDC_Transmit_FS((uint8_t*)"Updating yaw proportional gain to: ", 36);
+        } else if (target[2] == 'i') {
+            valid_command = 1;
+            pid_yaw_info.ki = new_gain;
+            CDC_Transmit_FS((uint8_t*)"Updating yaw integrator gain to: ", 34); 
+        } else if (target[2] == 'd') {
+            valid_command = 1;
+            pid_yaw_info.kd = new_gain;
+            CDC_Transmit_FS((uint8_t*)"Updating yaw derivative gain to: ", 34);
+        }
+    }
+    if (valid_command) {
+        CDC_Transmit_FS((uint8_t*)new_gain_as_string, strlen(new_gain_as_string));
+    } else {
+        CDC_Transmit_FS((uint8_t*)"Invalid command. Please try again.\n", 36);
+    }
+
+    //no delay necessary since user can send commands at any time. 
+    return;
+}
+
 /* article on quadcopter flight dynamics
 https://timhanewich.medium.com/how-i-developed-the-scout-flight-controller-part-1-quadcopter-flight-dynamics-400af73d21db
 */
@@ -95,7 +195,7 @@ https://timhanewich.medium.com/how-i-developed-the-scout-flight-controller-part-
  *
 */
 void pid_update(const IMU_Model_t* imu, const uint16_t* pilot_command, uint16_t* esc_commands_pct) {
-    float setpoint[4];
+    float setpoint[NUM_MOTORS];
 
     pilot_command_to_setpoint(pilot_command, setpoint);
     pid_step_all(imu, setpoint);
@@ -150,14 +250,14 @@ static void pilot_command_to_setpoint(const uint16_t* pilot_command, float* setp
     //axis commands
 
     //roll - should map to value between -90 and +90
-    setpoint[0] = ((pilot_command[0] - 500) / 500.0f) * PID_MAX_ROLL_ANGLE_INPUT;
+    setpoint[0] = (((float)pilot_command[0] - 500.0f) / 500.0f) * (float)PID_MAX_ROLL_ANGLE_INPUT;
     //pitch - should map to value between -90 and +90
-    setpoint[1] = ((pilot_command[1] - 500) / 500.0f) * PID_MAX_PITCH_ANGLE_INPUT;
+    setpoint[1] = (((float)pilot_command[1] - 500.0f) / 500.0f) * (float)PID_MAX_PITCH_ANGLE_INPUT;
     //yaw - should map to a value between -500 and 500
-    setpoint[3] = ((pilot_command[3] - 500) / 500.0f) * PID_MAX_YAW_RATE_INPUT;
+    setpoint[3] = (((float)pilot_command[3] - 500.0f) / 500.0f) * (float)PID_MAX_YAW_RATE_INPUT;
 
     //throttle command stays as a value between 0 and 1000
-    setpoint[2] = pilot_command[2];
+    setpoint[2] = pilot_command[2] / 2.0f;
 }
 
 
@@ -165,26 +265,26 @@ static void pilot_command_to_setpoint(const uint16_t* pilot_command, float* setp
 static void synthesize_pid_commands(const float* throttle_command_pct, uint16_t* esc_command_pct) {
     //synthesize commands
     //esc_command index corresponds to motor index on quadcopter
-    int16_t signed_commands[4];
+    int16_t signed_commands[NUM_MOTORS];
     //roll, pitch, yaw
-    int16_t* temp_axis_commands[3] = {&pid_axis_out_pct.roll_pct, &pid_axis_out_pct.pitch_pct, &pid_axis_out_pct.yaw_pct};
 
-    for (int motor = 0; motor < 4; motor++) {
-        signed_commands[motor] = (int16_t)* throttle_command_pct;
-        for (int axis = 0; axis < 3; axis++) {
-            signed_commands[motor] += (*temp_axis_commands[axis] * axis_synth_coeffs[motor][axis]);
-        }
-    }
+    signed_commands[0] = *throttle_command_pct + pid_axis_out_pct.roll_pct + pid_axis_out_pct.pitch_pct - pid_axis_out_pct.yaw_pct;
+    signed_commands[1] = *throttle_command_pct + pid_axis_out_pct.roll_pct - pid_axis_out_pct.pitch_pct + pid_axis_out_pct.yaw_pct;
+    signed_commands[2] = *throttle_command_pct - pid_axis_out_pct.roll_pct + pid_axis_out_pct.pitch_pct + pid_axis_out_pct.yaw_pct;
+    signed_commands[3] = *throttle_command_pct - pid_axis_out_pct.roll_pct - pid_axis_out_pct.pitch_pct - pid_axis_out_pct.yaw_pct;
 
     check_integrator(signed_commands);
 
-    //ensure valid output
-    for (int i = 0; i < 4; i++) {
-        if (signed_commands[i] > 1000) {
-            signed_commands[i] = 1000;
-        }
-        if (signed_commands[i] < 0) {
-            signed_commands[i] = 0;
+    //try to shift all motors up or down by same amount. But, if this shift pushes a motor above or below max allowed throttle,
+    //then cut off excess
+    check_max(signed_commands);
+    check_idle(signed_commands);
+
+    for (int motor = 0; motor < NUM_MOTORS; motor++) {
+        if (signed_commands[motor] < PID_OUTPUT_IDLE) {
+            signed_commands[motor] = PID_OUTPUT_IDLE;
+        } else if (signed_commands[motor] > PID_OUTPUT_MAX) {
+            signed_commands[motor] = PID_OUTPUT_MAX;
         }
     }
 
@@ -194,25 +294,72 @@ static void synthesize_pid_commands(const float* throttle_command_pct, uint16_t*
     esc_command_pct[3] = (uint16_t) signed_commands[3];
 }
 
-//lots of conditionals, but majority of them are nested and will not be called regularly. 
+
 //works by checking direction of overshoot, converting it to a signed value. Then, if accumulated error effective sign is the same as the 
 //overshoot direction, removes newly accumulated error
-static void check_integrator(int16_t* esc_commands_pct) {
+static void check_integrator(int16_t* signed_commands) {
     PID_t* axis_info[3] = {&pid_roll_info, &pid_pitch_info, &pid_yaw_info};
+    // array members represent roll, pitch, yaw. If true, then accumulated error is contributing to further overshoot
+    bool stop_integrator[3] = {false};
     int8_t direction = 0;
-    for (int motor = 0; motor < 4; motor++) {
+    for (int motor = 0; motor < NUM_MOTORS; motor++) {
         direction = 0; 
-        if (esc_commands_pct[motor] > 1000) {
+        if (signed_commands[motor] > PID_OUTPUT_MAX) {
             direction = 1;
-        } else if (esc_commands_pct[motor] < 0) {
+        } else if (signed_commands[motor] < PID_OUTPUT_IDLE) {
             direction = -1;
         }
     
         for (int axis = 0; axis < 3; axis++) {
             //means that accumulated error is contributing to further error
             if ((axis_info[axis]->accumulated_error * direction * axis_synth_coeffs[motor][axis]) > 0) {
-                axis_info[axis]->accumulated_error -= axis_info[axis]->new_accum_error;
+                stop_integrator[axis] = true;
+                HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
             }
+        }
+    }
+    //prevent subtracting new_accum_error from accumulated error twice if two motors are overshooting in the same way
+    for (int axis = 0; axis < 3; axis++) {
+        if (stop_integrator[axis]) {
+            axis_info[axis]->accumulated_error -= axis_info[axis]->new_accum_error;
+        }
+    }
+}
+
+static void check_idle(int16_t* signed_commands) {
+    int16_t shift_distance = 0;
+    bool shift_needed = false;
+    for (int i = 0; i < NUM_MOTORS; i++) {
+        if (signed_commands[i] < PID_OUTPUT_IDLE) {
+            shift_needed = true;
+            int16_t temp_shift_distance = PID_OUTPUT_IDLE - signed_commands[i];
+            if (temp_shift_distance > shift_distance) {
+                shift_distance = temp_shift_distance;
+            }
+        }
+    }
+    if (shift_needed) {
+        for (int i = 0; i < NUM_MOTORS; i++) {
+                signed_commands[i] += shift_distance;
+        }
+    }
+}
+
+static void check_max(int16_t* signed_commands) {
+    int16_t shift_distance = 0;
+    bool shift_needed = false;
+    for (int i = 0; i < NUM_MOTORS; i++) {
+        if (signed_commands[i] > PID_OUTPUT_MAX) {
+            shift_needed = true;
+            int16_t temp_shift_distance = signed_commands[i] - PID_OUTPUT_MAX;
+            if (temp_shift_distance > shift_distance) {
+                shift_distance = temp_shift_distance;
+            }
+        }
+    }
+    if (shift_needed) {
+        for (int i = 0; i < NUM_MOTORS; i++) {
+            signed_commands[i] -= shift_distance;
         }
     }
 }

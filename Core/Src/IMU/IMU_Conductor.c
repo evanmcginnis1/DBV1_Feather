@@ -26,7 +26,7 @@ void IMU_init(I2C_HandleTypeDef* hi2c) {
 }
 
 void IMU_update_model(IMU_Model_t* imu_model) {
-    IMU_get_euler_data(&(imu_model->yaw_rate), &(imu_model->roll_rate), &(imu_model->pitch_rate));
+    IMU_get_euler_data(&(imu_model->yaw_abs), &(imu_model->roll_abs), &(imu_model->pitch_abs));
     IMU_get_gyro_rawdata(&(imu_model->pitch_rate), &(imu_model->roll_rate), &(imu_model->yaw_rate));
 }
 

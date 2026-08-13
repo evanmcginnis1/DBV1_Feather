@@ -14,7 +14,9 @@
   * If no LICENSE file comes with this software, it is provided AS-IS.
   *
   ******************************************************************************
+  TODO: Only allow ARM when throttle set to zero
   */
+
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
@@ -24,7 +26,7 @@
 #include "spi.h"
 #include "tim.h"
 #include "usart.h"
-#include "usb_otg.h"
+#include "usb_device.h"
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -35,6 +37,7 @@
 #include "iBus.h"
 #include "pid.h"
 #include <math.h>
+#include <usbd_cdc_if.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,6 +59,11 @@
 
 /* USER CODE BEGIN PV */
 volatile bool loop_ready_flag = 0;
+
+//USB virtual COM variables
+extern uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
+extern uint8_t uart_newdata_received;
+extern uint8_t uart_receive_len;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -118,10 +126,10 @@ int main(void)
   MX_I2C1_Init();
   MX_SPI1_Init();
   MX_USART1_UART_Init();
-  MX_USB_OTG_FS_PCD_Init();
   MX_TIM3_Init();
   MX_TIM8_Init();
   MX_TIM2_Init();
+  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
 
 
@@ -129,15 +137,20 @@ int main(void)
   dshot_init(DSHOT300);
   ibus_init(IBUS_UART);
   IMU_init(&hi2c1);
-  //need to start timer explicitly
+  pid_init();
+  //need to start timer explicitly to run interrupt-based main loop 
   HAL_TIM_Base_Start_IT(MAIN_LOOP_TIM);
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    if (uart_newdata_received) {
+      uart_newdata_received = 0;
+      pid_update_gains(UserRxBufferFS);
+
+    }
     //only run loop if it has been enough time since last cycle
     if (loop_ready_flag) {
       loop_ready_flag = 0;
@@ -148,14 +161,18 @@ int main(void)
 
       if (ibus_failsafe_check(ibus_data) && ibus_is_armed(ibus_data)) {
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
-        uint16_t arm_test_output[4] = {800, 800, 800, 800};
         pid_update(&imu_model, ibus_data, esc_commands);
-        dshot_write_from_percents(arm_test_output);
+        dshot_write_from_percents(esc_commands);
 
       } else {
         //send zero throttle signal if quadcopter is disarmed
         dshot_disarm();
         HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
+        // check if user is trying to update pid gains via usb virtual com port. If so, update gains.
+        if (uart_newdata_received) {
+          uart_newdata_received = 0;
+          pid_update_gains(UserRxBufferFS);
+        }
       }
     }
   } 
