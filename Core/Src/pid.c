@@ -15,6 +15,7 @@
 #include <gpio.h>
 #include <string.h>
 #include <usbd_cdc_if.h>
+#include <stddef.h>
 
 
 static PID_t pid_roll_info;
@@ -69,6 +70,14 @@ static void check_integrator(int16_t* esc_commands_pct);
 static void check_idle(int16_t* signed_commands);
 static void check_max(int16_t* signed_commands);
 
+//USB update gain static functions
+static bool check_new_USB_gain_value(const float* new_gain);
+static const char* get_axis_name(const char* target_specifier);
+static const char* get_gain_name(const char* target_specifier);
+static size_t get_pid_gain_offset(const char* target_specifier);
+static PID_t* get_pid_target(const char* target_specifier);
+static void print_invalid_command_msg(void);
+
 void pid_init(void) {
     pid_roll_info.accumulated_error = 0;
     pid_roll_info.prev_error = 0;
@@ -87,99 +96,6 @@ void pid_init(void) {
     pid_yaw_info.kp = PID_YAW_KP;
     pid_yaw_info.ki = PID_YAW_KI;
     pid_yaw_info.kd = PID_YAW_KD;
-}
-
-/* Serial Command Options: (replace x with desired gain value )
-p_p x (pitch proportional)
-p_i x (pitch integrator gain)
-p_d x (pitch derivative gain)
-
-r_p x (roll)
-r_i x
-r_d x
-
-y_p x (yaw)
-y_i x
-y_d x
-*/
-void pid_update_gains(uint8_t* uart_buffer) {
-    uint8_t valid_command = 0;
-    uint8_t read_success = 0;
-    float new_gain = 0;
-    char new_gain_as_string[10];
-    // string should only ever be 3 characters long, plus one null terminator character
-    char target[4];
-
-    //limit to 15 characters to prevent buffer overflow, but don't ever expect a float that long
-    read_success = sscanf((char*)uart_buffer, "%3s %15f", target, &new_gain);
-    snprintf(new_gain_as_string, sizeof(new_gain_as_string) + 2, "%.3f \n", new_gain);
-
-    //protect against accidental dangerous gain values. Ignore if user tries to input invalid gain
-    if (new_gain < 0) {
-        CDC_Transmit_FS((uint8_t*)"Gain must be positive. Please try again.\n", 40);
-        return;
-    } else if (new_gain > 20) {
-        CDC_Transmit_FS((uint8_t*)"Gain must be less than 20. Please try again.\n", 44);
-        return;
-    }
-
-
-    if (!read_success) {
-        CDC_Transmit_FS((uint8_t*)"Invalid command. Please try again.\n", 36);
-        return;
-    }
-
-    if (target[0] == 'p') {
-        if (target[2] == 'p') {
-            pid_pitch_info.kp = new_gain;
-            valid_command = 1;
-            CDC_Transmit_FS((uint8_t*)"Updating pitch proportional gain to: ", 38);
-        } else if (target[2] == 'i') {
-            pid_pitch_info.ki = new_gain;
-            valid_command = 1;
-            CDC_Transmit_FS((uint8_t*)"Updating pitch integrator gain to: ", 36);
-        } else if (target[2] == 'd') {
-            pid_pitch_info.kd = new_gain;
-            valid_command = 1;
-            CDC_Transmit_FS((uint8_t*)"Updating pitch derivative gain to: ", 36);
-        }
-    } else if (target[0] == 'r') {
-        if (target[2] == 'p') {
-            valid_command = 1;
-            pid_roll_info.kp = new_gain;
-            CDC_Transmit_FS((uint8_t*)"Updating roll proportional gain to: ", 37);
-        } else if (target[2] == 'i') {
-            valid_command = 1;
-            pid_roll_info.ki = new_gain;
-            CDC_Transmit_FS((uint8_t*)"Updating roll integrator gain to: ", 35);
-        } else if (target[2] == 'd') {
-            valid_command = 1;
-            pid_roll_info.kd = new_gain;
-            CDC_Transmit_FS((uint8_t*)"Updating roll derivative gain to: ", 35);
-        }
-    } else if (target[0] == 'y') {
-        if (target[2] == 'p') {
-            valid_command = 1;
-            pid_yaw_info.kp = new_gain;
-            CDC_Transmit_FS((uint8_t*)"Updating yaw proportional gain to: ", 36);
-        } else if (target[2] == 'i') {
-            valid_command = 1;
-            pid_yaw_info.ki = new_gain;
-            CDC_Transmit_FS((uint8_t*)"Updating yaw integrator gain to: ", 34); 
-        } else if (target[2] == 'd') {
-            valid_command = 1;
-            pid_yaw_info.kd = new_gain;
-            CDC_Transmit_FS((uint8_t*)"Updating yaw derivative gain to: ", 34);
-        }
-    }
-    if (valid_command) {
-        CDC_Transmit_FS((uint8_t*)new_gain_as_string, strlen(new_gain_as_string));
-    } else {
-        CDC_Transmit_FS((uint8_t*)"Invalid command. Please try again.\n", 36);
-    }
-
-    //no delay necessary since user can send commands at any time. 
-    return;
 }
 
 /* article on quadcopter flight dynamics
@@ -201,6 +117,61 @@ void pid_update(const IMU_Model_t* imu, const uint16_t* pilot_command, uint16_t*
     pid_step_all(imu, setpoint);
     synthesize_pid_commands(&setpoint[2], esc_commands_pct);
 }
+
+
+/* Serial Command Options: (replace x with desired gain value )
+p_p x (pitch proportional)
+p_i x (pitch integrator gain)
+p_d x (pitch derivative gain)
+
+r_p x (roll)
+r_i x
+r_d x
+
+y_p x (yaw)
+y_i x
+y_d x
+*/
+void pid_update_gains(uint8_t* uart_buffer) {
+    uint8_t read_success = 0;
+    float new_gain = 0;
+    char output_string[53];
+    // string should only ever be 3 characters long, plus one null terminator character
+    char target_specifier[4];
+    
+    //limit to 15 characters in float to prevent buffer overflow, but don't ever expect a float that long
+    read_success = sscanf((char*)uart_buffer, "%3s %15f", target_specifier, &new_gain);
+
+    if (read_success != 2) {
+        print_invalid_command_msg();
+        return;
+    }
+    
+    //protect against accidental dangerous gain values. Ignore if user tries to input invalid gain
+    check_new_USB_gain_value(&new_gain);
+
+    //write new gain value to pid_info object
+    PID_t* pid_axis_info_ptr = get_pid_target(target_specifier);
+    size_t pid_gain_offset = get_pid_gain_offset(target_specifier);
+
+    if (pid_axis_info_ptr == NULL) {
+        print_invalid_command_msg();
+        return;
+    }
+
+    float* gain_ptr =  (float*)((uint8_t*)pid_axis_info_ptr + pid_gain_offset);
+    *gain_ptr = new_gain;
+
+    const char* axis_target_name = get_axis_name(target_specifier);
+    const char* pid_target_name = get_gain_name(target_specifier);
+
+
+    snprintf(output_string, sizeof(output_string), "Updating %s %s to: %3f", axis_target_name, pid_target_name, new_gain);
+    CDC_Transmit_FS((uint8_t*)output_string, strlen(output_string));
+
+    return;
+}
+
 
 //pilot_command[0] = roll
 //pilot_command[1] = pitch
@@ -362,4 +333,66 @@ static void check_max(int16_t* signed_commands) {
             signed_commands[i] -= shift_distance;
         }
     }
+}
+
+
+/**********************************************************************************************
+                        USB Serial Gain update helper functions
+***********************************************************************************************/
+static bool check_new_USB_gain_value(const float* new_gain) {
+        if (*new_gain < 0) {
+        CDC_Transmit_FS((uint8_t*)"Gain must be positive. Please try again.\n", 40);
+        return false;
+    } else if (*new_gain > 20) {
+        CDC_Transmit_FS((uint8_t*)"Gain must be less than 20. Please try again.\n", 44);
+        return false;
+    }
+    return true;
+}
+
+
+static const char* get_axis_name(const char* target_specifier) {
+    if (target_specifier[0] == 'p') {
+        return "pitch";
+    } else if (target_specifier[0] == 'r') {
+        return "roll";
+    } else if (target_specifier[0] == 'y') {
+        return "yaw";
+    } else {
+        return "INVALID";
+    }
+}
+
+static const char* get_gain_name(const char* target_specifier) {
+    if (target_specifier[2] == 'p') {
+        return "proportional gain";
+    } else if (target_specifier[2] == 'i') {
+        return "integrator gain";
+    } else if (target_specifier[2] == 'd') {
+        return "derivative gain";
+    } else {
+        return "INVALID";
+    }
+}
+
+static size_t get_pid_gain_offset(const char* target_specifier) {
+    switch(target_specifier[2]) {
+        case 'p': return offsetof(PID_t, kp);
+        case 'i': return offsetof(PID_t, ki);
+        case 'd': return offsetof(PID_t, kd);
+        default: return (size_t)-1 ;
+    }
+}
+
+static PID_t* get_pid_target(const char* target_specifier) {
+    switch (target_specifier[0]) {
+        case 'p': return &pid_pitch_info;
+        case 'r': return &pid_roll_info;
+        case 'y': return &pid_yaw_info;
+        default: return NULL;
+    }
+}
+
+static void print_invalid_command_msg(void) {
+    CDC_Transmit_FS((uint8_t*)"Invalid command. Please try again.\n", 36);
 }
