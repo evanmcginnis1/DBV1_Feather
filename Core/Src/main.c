@@ -172,6 +172,8 @@ int main(void)
         if (uart_newdata_received) {
           uart_newdata_received = 0;
           pid_update_gains(UserRxBufferFS);
+          //delay for safety
+          HAL_Delay(3000);
         }
       }
     }
