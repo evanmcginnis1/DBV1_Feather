@@ -36,6 +36,7 @@
 #include "DShot.h"
 #include "iBus.h"
 #include "pid.h"
+#include "state.h"
 #include <math.h>
 #include <usbd_cdc_if.h>
 /* USER CODE END Includes */
@@ -101,6 +102,7 @@ int main(void)
   //write all ones to ibus_data array so that 
   uint16_t ibus_data[IBUS_NUM_CHANNELS];
   uint16_t esc_commands[4] = {0};
+  Quadcopter_State_t state = DISARMED;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -146,39 +148,37 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    if (uart_newdata_received) {
-      uart_newdata_received = 0;
-      pid_update_gains(UserRxBufferFS);
-
-    }
-    //only run loop if it has been enough time since last cycle
     if (loop_ready_flag) {
       loop_ready_flag = 0;
-
       IMU_update_model(&imu_model);
       ibus_read_as_percents(ibus_data);
-      //failsafe check sets all inputs to zero
+      update_state(ibus_data, &imu_model, &state);
 
-      if (ibus_failsafe_check(ibus_data) && ibus_is_armed(ibus_data)) {
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
-        pid_update(&imu_model, ibus_data, esc_commands);
-        dshot_write_from_percents(esc_commands);
+      switch(state) {
+        case ARMED: 
+            if (ibus_failsafe_check(ibus_data)) {
+              HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
+              pid_update(&imu_model, ibus_data, esc_commands);
+              dshot_write_from_percents(esc_commands);
+            }
+          break;
 
-      } else {
-        //send zero throttle signal if quadcopter is disarmed
-        dshot_disarm();
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
-        // check if user is trying to update pid gains via usb virtual com port. If so, update gains.
-        if (uart_newdata_received) {
-          uart_newdata_received = 0;
+        case DOWNLOAD_GAINS:
+          dshot_disarm();
           pid_update_gains(UserRxBufferFS);
-          //delay for safety
-          HAL_Delay(3000);
-        }
+          uart_newdata_received = 0;
+        case TRANSMIT_LOGS:
+          dshot_disarm();
+          break;
+        case DISARMED: 
+          //fall through (default to disarmed)
+        default: 
+          dshot_disarm();
+          HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
+          break;
       }
     }
-  } 
-    
+  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
