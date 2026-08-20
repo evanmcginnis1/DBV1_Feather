@@ -67,11 +67,18 @@ Effects: Initializes pid info structs for each axis using defined gain constants
 void pid_init(void);
 
 /*
- * Requires: uart_data has been populated with message from serial port containing 
+ * Requires: uart_data has been populated with message from serial port containing new pid gain value
  * Modifies: PID loop gain variables
  * Effects: Updates PID 
  */
-void pid_update_gains(uint8_t* uart_data);
+void pid_update_gains(void);
+
+/*
+ * Requires: USB port is availale
+ * Modifies: Virtual COM TX buffer
+ * Effects: prints gain update message format over serial
+ */
+void pid_update_gains_prompt(void);
 /*
 Requires: pilot commands are in TAER channel sequence. pilot command values are all percent-style integers from 0-1000 
 MUST VERIFY THAT QUAD IS ARMED BEFORE CALLING THIS FUNCTION. 

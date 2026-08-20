@@ -16,6 +16,7 @@
 #include <string.h>
 #include <usbd_cdc_if.h>
 #include <stddef.h>
+#include "USB_Handler.h"
 
 
 static PID_t pid_roll_info;
@@ -76,7 +77,9 @@ static const char* get_axis_name(const char* target_specifier);
 static const char* get_gain_name(const char* target_specifier);
 static size_t get_pid_gain_offset(const char* target_specifier);
 static PID_t* get_pid_target(const char* target_specifier);
-static void print_invalid_command_msg(void);
+static void print_invalid_pid_command_msg(void);
+static void print_invalid_pid_axis_specifier_msg(void);
+static void print_invalid_gain_specifier_msg();
 
 void pid_init(void) {
     pid_roll_info.accumulated_error = 0;
@@ -132,18 +135,31 @@ y_p x (yaw)
 y_i x
 y_d x
 */
-void pid_update_gains(uint8_t* uart_buffer) {
+void pid_update_gains(void) {
     uint8_t read_success = 0;
-    float new_gain = 0;
-    char output_string[53];
+    float new_gain = 0.0f;
     // string should only ever be 3 characters long, plus one null terminator character
     char target_specifier[4];
+
+    pid_update_gains_prompt();
     
+    //wait for user input
+    wait_for_user_input(10);
+    uart_data_ready = false;
+
+    uint8_t uart_buffer[APP_RX_DATA_SIZE];
+    uint32_t len = uart_receive_len;
+    memcpy(uart_buffer, UserRxBufferFS, sizeof(UserRxBufferFS));
+    //need null terminator to prevent sscanf from reading forever without stopping
+    add_null_terminator(uart_buffer, &len);
+
     //limit to 15 characters in float to prevent buffer overflow, but don't ever expect a float that long
     read_success = sscanf((char*)uart_buffer, "%3s %15f", target_specifier, &new_gain);
 
+
+
     if (read_success != 2) {
-        print_invalid_command_msg();
+        print_invalid_pid_command_msg();
         return;
     }
     
@@ -155,8 +171,12 @@ void pid_update_gains(uint8_t* uart_buffer) {
     size_t pid_gain_offset = get_pid_gain_offset(target_specifier);
 
     if (pid_axis_info_ptr == NULL) {
-        print_invalid_command_msg();
+        print_invalid_pid_axis_specifier_msg();
         return;
+    }
+
+    if (pid_gain_offset == (size_t)-1) {
+        print_invalid_gain_specifier_msg();
     }
 
     float* gain_ptr =  (float*)((uint8_t*)pid_axis_info_ptr + pid_gain_offset);
@@ -165,13 +185,25 @@ void pid_update_gains(uint8_t* uart_buffer) {
     const char* axis_target_name = get_axis_name(target_specifier);
     const char* pid_target_name = get_gain_name(target_specifier);
 
-
-    snprintf(output_string, sizeof(output_string), "Updating %s %s to: %3f", axis_target_name, pid_target_name, new_gain);
-    CDC_Transmit_FS((uint8_t*)output_string, strlen(output_string));
+    printf("Updated %s %s to: %.3f", axis_target_name, pid_target_name, new_gain);
 
     return;
 }
 
+void pid_update_gains_prompt(void) {
+    printf("Serial PID gain update options: (replace x with desired gain value)\n"
+            "p_p x (pitch proportional)\n"
+            "p_i x (pitch integrator gain)\n"
+            "p_d x (pitch derivative gain)\n"
+            "\n"
+            "r_p x (roll)\n"
+            "r_i x\n"
+            "r_d x\n"
+            "\n"
+            "y_p x (yaw)\n"
+            "y_i x\n"
+            "y_d x\n");
+}
 
 //pilot_command[0] = roll
 //pilot_command[1] = pitch
@@ -393,6 +425,14 @@ static PID_t* get_pid_target(const char* target_specifier) {
     }
 }
 
-static void print_invalid_command_msg(void) {
-    CDC_Transmit_FS((uint8_t*)"Invalid command. Please try again.\n", 36);
+static void print_invalid_pid_command_msg(void) {
+    printf("Failed to parse pid command input. Double check that your syntax is correct and try again. \n");
+}
+
+static void print_invalid_pid_axis_specifier_msg(void) {
+    printf("Invalid axis specifier. Axis specifier must be p_, r_, y_");
+}
+
+static void print_invalid_gain_specifier_msg() {
+    printf("Invalid gain target specifier. Gain specifier must be p, i, or d");
 }

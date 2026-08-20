@@ -20,10 +20,13 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "State.h"
 #include "adc.h"
 #include "dma.h"
 #include "i2c.h"
 #include "spi.h"
+#include "stm32f4xx_hal.h"
+#include "stm32f4xx_hal_gpio.h"
 #include "tim.h"
 #include "usart.h"
 #include "usb_device.h"
@@ -37,6 +40,7 @@
 #include "iBus.h"
 #include "pid.h"
 #include "state.h"
+#include "USB_Handler.h"
 #include <math.h>
 #include <usbd_cdc_if.h>
 /* USER CODE END Includes */
@@ -62,9 +66,7 @@
 volatile bool loop_ready_flag = 0;
 
 //USB virtual COM variables
-extern uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
-extern uint8_t uart_newdata_received;
-extern uint8_t uart_receive_len;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -78,6 +80,14 @@ void set_loop_rate(uint32_t loop_rate_hz) {
 
   __HAL_TIM_SET_PRESCALER(MAIN_LOOP_TIM, tim_PSC);
   __HAL_TIM_SET_AUTORELOAD(MAIN_LOOP_TIM, tim_ARR);
+}
+
+//overwrite weak function so that printf works with serial port
+int _write(int file, char *ptr, int len) {
+  while (CDC_Transmit_FS((uint8_t *)ptr, len) == USBD_BUSY) {
+        HAL_Delay(1);
+    }
+    return len;
 }
 /* USER CODE END PFP */
 
@@ -102,7 +112,9 @@ int main(void)
   //write all ones to ibus_data array so that 
   uint16_t ibus_data[IBUS_NUM_CHANNELS];
   uint16_t esc_commands[4] = {0};
-  Quadcopter_State_t state = DISARMED;
+  Quadcopter_State_t state = SOFT_DISARM;
+  bool disarm_locked = false;
+  User_USB_Commands_t user_command;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -136,12 +148,18 @@ int main(void)
 
 
   set_loop_rate(100);
+  /*
   dshot_init(DSHOT300);
   ibus_init(IBUS_UART);
   IMU_init(&hi2c1);
   pid_init();
+  */
   //need to start timer explicitly to run interrupt-based main loop 
   HAL_TIM_Base_Start_IT(MAIN_LOOP_TIM);
+  //run_usb_tests();
+  //for debugging without controller
+  state = HARD_DISARM;
+  disarm_locked = true;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -150,9 +168,10 @@ int main(void)
   {
     if (loop_ready_flag) {
       loop_ready_flag = 0;
-      IMU_update_model(&imu_model);
-      ibus_read_as_percents(ibus_data);
-      update_state(ibus_data, &imu_model, &state);
+      //IMU_update_model(&imu_model);
+      //ibus_read_as_percents(ibus_data);
+
+      //update_state(ibus_data, &imu_model, &disarm_locked, &state);
 
       switch(state) {
         case ARMED: 
@@ -163,15 +182,48 @@ int main(void)
             }
           break;
 
-        case DOWNLOAD_GAINS:
-          dshot_disarm();
-          pid_update_gains(UserRxBufferFS);
-          uart_newdata_received = 0;
-        case TRANSMIT_LOGS:
-          dshot_disarm();
+        case HARD_DISARM:
+        // if just waiting for user to flip arm switch to disarmed, don't enforce 10s delay or check serial input
+        if (!disarm_locked) {
           break;
-        case DISARMED: 
+        }
+          user_command = INVALID_COMMAND;
+          while (disarm_locked) {
+            //dshot_disarm();
+            //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
+            user_command = get_usb_command();
+            uart_data_ready = false;
+
+            switch (user_command) {
+              case DOWNLOAD_LOGS:
+              //TODO: Implement
+                ;
+                break;
+              case UPDATE_PID_GAINS:
+                pid_update_gains();
+                break;
+              case UNLOCK:
+                disarm_locked = false;
+                break;
+              case INVALID_COMMAND: 
+                printf("something broken...");
+                break;
+            }
+
+          // require affirmative user input to re-arm
+          // print list of options every 3 seconds: 
+          // re-arm (10s delay)
+          // download logs
+          // update PID gains
+          // check UART buffer for user command
+          // if user commands to release disarm, reset disarm_locked flag
+
+          }
+          HAL_Delay(10000);
+          break;
+        case SOFT_DISARM: 
           //fall through (default to disarmed)
+          //only requires flipping ARM switch to re-arm
         default: 
           dshot_disarm();
           HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
