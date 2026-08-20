@@ -19,18 +19,10 @@
 
 /*
  * Requires: user_command variable has been set to a valid value
- * Modifies: UART TX buffer
+ * Modifies: UART TX buffer, UserRXBufferFS, uart_data_ready, 
  * Effects: Sends user a message with their input, asks for confirmation. If confirmation given, return true. Else false
  */
-static bool confirm_usb_input(const User_USB_Commands_t* user_command);
-
-/*
- * Requires: nothing
- * Modifies: USB TX buffer
- * Effects: Sends confirmation message over USB virtual COM to user
- */
-static void send_confirmation_msg(const char* user_command_string);
-
+static bool confirm_usb_mode_input(const User_USB_Commands_t* user_command);
 
 
 /* 
@@ -48,7 +40,18 @@ static User_Confirmation_Result_t check_user_confirmation_input(uint8_t uart_buf
  */
 static void normalize_input(uint8_t* input, const uint32_t* Len);
 
+static void prompt_for_usb_commands(void);
 
+static char* usb_mode_to_string(const User_USB_Commands_t* user_command);
+
+/*
+ * Requires: nothing
+ * Modifies: USB TX buffer
+ * Effects: Sends confirmation message over USB virtual COM to user
+ */
+static void send_confirmation_msg(const char* user_command_string);
+
+User_Confirmation_Result_t check_user_confirmation_input(uint8_t uart_buffer[APP_RX_DATA_SIZE], const uint32_t Len);
 
 
 
@@ -101,6 +104,8 @@ static void test_check_user_confirmation_input(void) {
     }
 }
 
+
+
 static void test_normalize_usb_input(void) {
     char* test_inputs[5] = {"abc", "ABC", "AbC", "aBc", "abc123"};
     char* expected_outputs[5] = {"abc", "abc", "abc", "abc", "abc123"};
@@ -123,16 +128,16 @@ static void test_confirm_usb_input(void) {
     printf("Testing confirm_usb_input: \n"); 
 
     printf("Testing 'unlock' message response: \n");
-    confirm_usb_input(&unlock);
+    confirm_usb_mode_input(&unlock);
 
     printf("Testing 'DOWNLOAD_LOGS' message response: \n");
-    confirm_usb_input(&download_logs);
+    confirm_usb_mode_input(&download_logs);
 
     printf("Testing 'PID_UPDATE_GAINS' message response: \n");
-    confirm_usb_input(&update_pid);
+    confirm_usb_mode_input(&update_pid);
 
     printf("Testing with invalid input: \n");
-    confirm_usb_input(&invalid);
+    confirm_usb_mode_input(&invalid);
 }
 /*************************************************** */
 
@@ -179,7 +184,7 @@ User_USB_Commands_t get_usb_command(void) {
         return INVALID_COMMAND;
     }
     
-    if (confirm_usb_input(&user_command)) {
+    if (confirm_usb_mode_input(&user_command)) {
         printf("confirmed command\n");
         return user_command;
     } else {
@@ -189,38 +194,48 @@ User_USB_Commands_t get_usb_command(void) {
 }
 
 
-static bool confirm_usb_input(const User_USB_Commands_t* user_command) {
-    char* user_command_string;
-    
-    if (*user_command == UPDATE_PID_GAINS) {
-        user_command_string = "update pid gains";
-    } else if (*user_command == DOWNLOAD_LOGS) {
-        user_command_string = "Download flight logs";
-    } else if (*user_command == UNLOCK){
-        user_command_string = "unlock disarm state (quad can re-arm in ten seconds if arm switch flipped down)";
-    } else {
-        user_command_string = "invalid";
+static bool confirm_usb_mode_input(const User_USB_Commands_t* user_command) {
+    if (*user_command == INVALID_COMMAND) {
         return false;
     }
-    send_confirmation_msg(user_command_string);
+    const char* user_command_string = usb_mode_to_string(user_command);
+    return confirm_user_action(user_command_string);
+}
 
-    //wait for user input
+static char* usb_mode_to_string(const User_USB_Commands_t* user_command) {
+    if (*user_command == UPDATE_PID_GAINS) {
+        return "update pid gains";
+    } else if (*user_command == DOWNLOAD_LOGS) {
+        return "Download flight logs";
+    } else if (*user_command == UNLOCK){
+        return "unlock disarm state (quad can re-arm in ten seconds if arm switch flipped down)";
+    } else {
+        //should never actually be called; just prevents compiler warning
+        return "invalid";
+    }
+}
+
+bool confirm_user_action(const char* user_action_string) {
+
+    send_confirmation_msg(user_action_string);
     wait_for_user_input(10);
     uart_data_ready = false;
-    // uart buffer updated by dma so use global variable to access it
-
+    // no point copying uart data to a separate array since i'm just doing a simple comparison on it in one step. it's 
+    // unlikely to change during the time it takes to do that one action
+    
     switch (check_user_confirmation_input(UserRxBufferFS, uart_receive_len)) {
         case CONFIRM:
             return true;
         case CANCEL:
+            printf("Cancelling request\n");
             //fallthrough
         case INVALID_INPUT:
-            //fallthrough for now
+            printf("Invalid confirmation message --> Cancelling request. Please try again\n");
+            //fallthrough
         default: 
             return false;
     }
 }
-
 
 static User_Confirmation_Result_t check_user_confirmation_input(uint8_t uart_buffer[APP_RX_DATA_SIZE], const uint32_t Len) {
     //make input all lowercase
@@ -239,7 +254,8 @@ static User_Confirmation_Result_t check_user_confirmation_input(uint8_t uart_buf
     }
 }
 
-void prompt_for_usb_commands(void) {
+// messages
+static void prompt_for_usb_commands(void) {
     printf("\nFlight Controller USB Commands:\n"
             "'update_pid': Allows user to update PID gain values\n"
             "'download_logs': Streams flight log data over serial to computer\n"
@@ -247,11 +263,6 @@ void prompt_for_usb_commands(void) {
             "RE-ARMED. BE PREPARED TO MOVE AWAY QUICKLY\n");
 }
 
-void wait_for_user_input(uint32_t delay_ms_between_checks) {
-    while (!uart_data_ready) {
-    HAL_Delay(delay_ms_between_checks);
-    }
-}
 
 static void send_confirmation_msg(const char* user_command_string) {
 
@@ -272,6 +283,13 @@ bool add_null_terminator(uint8_t* uart_buffer, const uint32_t* Len) {
 
     uart_buffer[*Len] = '\0';
     return true;
+}
+
+
+void wait_for_user_input(uint32_t delay_ms_between_checks) {
+    while (!uart_data_ready) {
+    HAL_Delay(delay_ms_between_checks);
+    }
 }
 
 static void normalize_input(uint8_t* input, const uint32_t* Len) {

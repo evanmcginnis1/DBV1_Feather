@@ -39,7 +39,8 @@ void run_usb_tests(void);
 
 User_USB_Commands_t get_usb_command();
 
-void prompt_for_usb_commands(void);
+bool confirm_user_action(const char* user_action_string);
+
 
 void wait_for_user_input(uint32_t delay_ms_between_checks);
 /*

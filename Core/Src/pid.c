@@ -72,14 +72,16 @@ static void check_idle(int16_t* signed_commands);
 static void check_max(int16_t* signed_commands);
 
 //USB update gain static functions
-static bool check_new_USB_gain_value(const float* new_gain);
+static bool check_new_gain_range(const float* new_gain);
 static const char* get_axis_name(const char* target_specifier);
 static const char* get_gain_name(const char* target_specifier);
 static size_t get_pid_gain_offset(const char* target_specifier);
 static PID_t* get_pid_target(const char* target_specifier);
+static bool get_gain_ptr(char* target_specifier, float** gain_ptr);
 static void print_invalid_pid_command_msg(void);
 static void print_invalid_pid_axis_specifier_msg(void);
 static void print_invalid_gain_specifier_msg();
+
 
 void pid_init(void) {
     pid_roll_info.accumulated_error = 0;
@@ -156,38 +158,47 @@ void pid_update_gains(void) {
     //limit to 15 characters in float to prevent buffer overflow, but don't ever expect a float that long
     read_success = sscanf((char*)uart_buffer, "%3s %15f", target_specifier, &new_gain);
 
-
-
     if (read_success != 2) {
         print_invalid_pid_command_msg();
         return;
     }
     
     //protect against accidental dangerous gain values. Ignore if user tries to input invalid gain
-    check_new_USB_gain_value(&new_gain);
+    check_new_gain_range(&new_gain);
 
     //write new gain value to pid_info object
-    PID_t* pid_axis_info_ptr = get_pid_target(target_specifier);
-    size_t pid_gain_offset = get_pid_gain_offset(target_specifier);
-
-    if (pid_axis_info_ptr == NULL) {
-        print_invalid_pid_axis_specifier_msg();
+    float* gain_ptr = NULL; 
+    // if invalid target specifier, don't update anything
+    if (!get_gain_ptr(target_specifier, &gain_ptr)) {
         return;
     }
-
-    if (pid_gain_offset == (size_t)-1) {
-        print_invalid_gain_specifier_msg();
-    }
-
-    float* gain_ptr =  (float*)((uint8_t*)pid_axis_info_ptr + pid_gain_offset);
     *gain_ptr = new_gain;
 
     const char* axis_target_name = get_axis_name(target_specifier);
     const char* pid_target_name = get_gain_name(target_specifier);
 
+    
     printf("Updated %s %s to: %.3f", axis_target_name, pid_target_name, new_gain);
 
     return;
+}
+//uses pointer to pointer to update gain_ptr
+static bool get_gain_ptr(char* target_specifier, float** gain_ptr) {
+    PID_t* pid_axis_info_ptr = get_pid_target(target_specifier);
+    size_t pid_gain_offset = get_pid_gain_offset(target_specifier);
+
+    if (pid_axis_info_ptr == NULL) {
+        print_invalid_pid_axis_specifier_msg();
+        return false;
+    }
+
+    if (pid_gain_offset == (size_t)-1) {
+        print_invalid_gain_specifier_msg();
+        return false;
+    }
+
+    *gain_ptr =  (float*)((uint8_t*)pid_axis_info_ptr + pid_gain_offset);
+    return true;
 }
 
 void pid_update_gains_prompt(void) {
@@ -371,7 +382,7 @@ static void check_max(int16_t* signed_commands) {
 /**********************************************************************************************
                         USB Serial Gain update helper functions
 ***********************************************************************************************/
-static bool check_new_USB_gain_value(const float* new_gain) {
+static bool check_new_gain_range(const float* new_gain) {
         if (*new_gain < 0) {
         CDC_Transmit_FS((uint8_t*)"Gain must be positive. Please try again.\n", 40);
         return false;
