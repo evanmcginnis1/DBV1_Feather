@@ -20,13 +20,9 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "State.h"
-#include "adc.h"
 #include "dma.h"
 #include "i2c.h"
 #include "spi.h"
-#include "stm32f4xx_hal.h"
-#include "stm32f4xx_hal_gpio.h"
 #include "tim.h"
 #include "usart.h"
 #include "usb_device.h"
@@ -41,8 +37,11 @@
 #include "pid.h"
 #include "state.h"
 #include "USB_Handler.h"
+#include "FlightLogger.h"
+#include "GD25Q16.h"
 #include <math.h>
 #include <usbd_cdc_if.h>
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -110,8 +109,8 @@ int main(void)
   /* USER CODE BEGIN 1 */
   IMU_Model_t imu_model;
   //write all ones to ibus_data array so that 
-  uint16_t ibus_data[IBUS_NUM_CHANNELS];
-  uint16_t esc_commands[4] = {0};
+  uint16_t ibus_data_pcts[IBUS_NUM_CHANNELS];
+  uint16_t esc_commands_pcts[4] = {0};
   Quadcopter_State_t state = SOFT_DISARM;
   bool disarm_locked = false;
   User_USB_Commands_t user_command;
@@ -136,7 +135,6 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_DMA_Init();
-  MX_ADC1_Init();
   MX_I2C1_Init();
   MX_SPI1_Init();
   MX_USART1_UART_Init();
@@ -154,6 +152,10 @@ int main(void)
   IMU_init(&hi2c1);
   pid_init();
   */
+  while(1) {
+    test_flash_functions();
+    HAL_Delay(10000);
+  }
   //need to start timer explicitly to run interrupt-based main loop 
   HAL_TIM_Base_Start_IT(MAIN_LOOP_TIM);
   //run_usb_tests();
@@ -175,10 +177,10 @@ int main(void)
 
       switch(state) {
         case ARMED: 
-            if (ibus_failsafe_check(ibus_data)) {
+            if (ibus_failsafe_check(ibus_data_pcts)) {
               HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
-              pid_update(&imu_model, ibus_data, esc_commands);
-              dshot_write_from_percents(esc_commands);
+              pid_update(&imu_model, ibus_data_pcts, esc_commands_pcts);
+              dshot_write_from_percents(esc_commands_pcts);
             }
           break;
 
@@ -203,10 +205,10 @@ int main(void)
                 pid_update_gains();
                 break;
               case UNLOCK:
-                disarm_locked = false;
+                unlock_state(&disarm_locked);
                 break;
               case INVALID_COMMAND: 
-                printf("something broken...");
+                printf("\nTry again\n");
                 break;
             }
 
