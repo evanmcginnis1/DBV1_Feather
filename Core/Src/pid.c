@@ -77,7 +77,7 @@ static const char* get_axis_name(const char* target_specifier);
 static const char* get_gain_name(const char* target_specifier);
 static size_t get_pid_gain_offset(const char* target_specifier);
 static PID_t* get_pid_target(const char* target_specifier);
-static bool get_gain_ptr(char* target_specifier, float** gain_ptr);
+static bool get_gain_ptr(const char* target_specifier, float** gain_ptr);
 static void print_invalid_pid_command_msg(void);
 static void print_invalid_pid_axis_specifier_msg(void);
 static void print_invalid_gain_specifier_msg();
@@ -137,7 +137,7 @@ y_p x (yaw)
 y_i x
 y_d x
 */
-void pid_update_gains(void) {
+bool pid_update_gains(void) {
     uint8_t read_success = 0;
     float new_gain = 0.0f;
     // string should only ever be 3 characters long, plus one null terminator character
@@ -160,7 +160,7 @@ void pid_update_gains(void) {
 
     if (read_success != 2) {
         print_invalid_pid_command_msg();
-        return;
+        return false;
     }
     
     //protect against accidental dangerous gain values. Ignore if user tries to input invalid gain
@@ -170,20 +170,24 @@ void pid_update_gains(void) {
     float* gain_ptr = NULL; 
     // if invalid target specifier, don't update anything
     if (!get_gain_ptr(target_specifier, &gain_ptr)) {
-        return;
+        return false;
     }
-    *gain_ptr = new_gain;
 
     const char* axis_target_name = get_axis_name(target_specifier);
     const char* pid_target_name = get_gain_name(target_specifier);
 
-    
-    printf("Updated %s %s to: %.3f", axis_target_name, pid_target_name, new_gain);
-
-    return;
+    char action_string[355];
+    snprintf(action_string, sizeof(action_string), "update pid %s %s to %.3f", axis_target_name, pid_target_name, new_gain);
+    if (confirm_user_action(action_string)) {
+        printf("Updated %s %s to: %.3f", axis_target_name, pid_target_name, new_gain);
+        *gain_ptr = new_gain;
+        return true;
+    } else {
+        return false;
+    }
 }
 //uses pointer to pointer to update gain_ptr
-static bool get_gain_ptr(char* target_specifier, float** gain_ptr) {
+static bool get_gain_ptr(const char* target_specifier, float** gain_ptr) {
     PID_t* pid_axis_info_ptr = get_pid_target(target_specifier);
     size_t pid_gain_offset = get_pid_gain_offset(target_specifier);
 
