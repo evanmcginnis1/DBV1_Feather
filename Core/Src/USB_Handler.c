@@ -188,7 +188,6 @@ User_USB_Commands_t get_usb_command(void) {
         printf("confirmed command\n");
         return user_command;
     } else {
-        printf("invalid command\n");
         return INVALID_COMMAND;
     }
 }
@@ -215,6 +214,17 @@ static char* usb_mode_to_string(const User_USB_Commands_t* user_command) {
     }
 }
 
+void unlock_state(bool* disarm_locked) {
+    if (confirm_user_action("unlock from hard disarm state")) {
+        disarm_locked = false;
+        printf("Unlocked hard disarm. After 10 second delay, quad behavior will reflect arm switch state.\n"
+                "To remain in hard_disarm mode, ensure hard_disarm switch remains flipped down after the delay\n");
+    } else {
+        printf("Unlock canceled. Quadcopter will remain in hard_disarm mode.\n");
+    }
+    // else: do nothing
+}
+//"Are you sure you want to %s? Type Y to confirm or N to cancel\n", user_command_string"
 bool confirm_user_action(const char* user_action_string) {
 
     send_confirmation_msg(user_action_string);
@@ -228,10 +238,10 @@ bool confirm_user_action(const char* user_action_string) {
             return true;
         case CANCEL:
             printf("Cancelling request\n");
-            //fallthrough
+            return false;
         case INVALID_INPUT:
             printf("Invalid confirmation message --> Cancelling request. Please try again\n");
-            //fallthrough
+            return false;
         default: 
             return false;
     }
@@ -241,7 +251,7 @@ static User_Confirmation_Result_t check_user_confirmation_input(uint8_t uart_buf
     //make input all lowercase
     normalize_input(uart_buffer, &Len);
     //allow space for newline character but don't require it
-    if (Len > 2) {
+    if (Len > 1) {
         return INVALID_INPUT;
     }
 
@@ -256,11 +266,13 @@ static User_Confirmation_Result_t check_user_confirmation_input(uint8_t uart_buf
 
 // messages
 static void prompt_for_usb_commands(void) {
-    printf("\nFlight Controller USB Commands:\n"
+    printf("\n------------------------------------------------------------------------------------------------\n\n"
+            "Please enter one of the following commands: \n\n"
+            "Flight Controller USB Commands:\n"
             "'update_pid': Allows user to update PID gain values\n"
             "'download_logs': Streams flight log data over serial to computer\n"
             "'unlock': unlocks quad from hard disarm state. DANGER: AFTER TEN SECONDS, QUAD CAN POTENTIALLY BE"
-            "RE-ARMED. BE PREPARED TO MOVE AWAY QUICKLY\n");
+            "RE-ARMED. BE PREPARED TO MOVE AWAY QUICKLY\n\n");
 }
 
 

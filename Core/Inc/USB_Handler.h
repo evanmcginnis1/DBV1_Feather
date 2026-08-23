@@ -39,7 +39,10 @@ void run_usb_tests(void);
 
 User_USB_Commands_t get_usb_command();
 
+void unlock_state(bool* disarm_locked);
+
 bool confirm_user_action(const char* user_action_string);
+
 
 
 void wait_for_user_input(uint32_t delay_ms_between_checks);
