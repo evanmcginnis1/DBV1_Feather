@@ -22,4 +22,4 @@ Luckily, there is still one free channel on my receiver that I can map to an unu
 Once this command is sent, there will be a fixed 10 second delay to allow the user to unplug the usb cable and move a safe distance away. The delay overrides the switches and keeps the quad in disarm mode. However, the quad does not automatically arm itself after the delay is up; that still depends on the position of the primary arm switch. The purpose of the delay is to add an additional layer of safety, preventing a small mistake from causing a devastating injury. 
 
 While this system may take a few extra hours to implement, it is important because it ensures that safety keeps up with my pace of development. 
-[[arm_disarm_safety_flow.svg]]
+![arm_disarm_safety_flow](../Assets/arm_disarm_safety_flow.svg)
