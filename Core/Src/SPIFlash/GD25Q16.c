@@ -127,28 +127,44 @@ static void cs_pin_low(void);
 
 
 
-static void test_find_next_chunk(void);
-static void test_write_header(void);
+static void test_find_next_chunk(uint32_t* next_chunk_addr, uint32_t* next_chunk_counter);
+static void test_write_header(uint32_t* next_chunk_addr, uint32_t* next_chunk_counter);
 
 
 
-static void test_write_header(void) {
+static void test_write_header(uint32_t* next_chunk_addr, uint32_t* next_chunk_counter) {
+    PID_t pitch_info = {0};
+    PID_t roll_info = {0};
+    PID_t yaw_info = {0};
+    FlightLogger_Metadata_t metadata;
+    write_metadata(next_chunk_addr, next_chunk_counter, &pitch_info, &roll_info, &yaw_info);
+    if (!read_metadata(next_chunk_addr, &metadata)) {
+        printf("Metadata not found at %" PRIu32 "\n", *next_chunk_addr);
+    } else {
+        if (metadata.chunk_counter == *next_chunk_counter) {
+            printf("Metadata found and counter matches!\n");
+        } else {
+            printf("Metadata corrupted...\n");
+        }
+    }
+
     return;
 }
 
 
 void test_flash_functions(void) {
-    test_find_next_chunk();
-}
-
-static void test_find_next_chunk(void) {
     uint32_t next_chunk_addr;
     uint32_t next_chunk_counter;
+    test_find_next_chunk(&next_chunk_addr, &next_chunk_counter);
+    test_write_header(&next_chunk_addr, &next_chunk_counter);
+}
+
+static void test_find_next_chunk(uint32_t* next_chunk_addr, uint32_t* next_chunk_counter) {
     printf("Testing SPIFlash function find_next_chunk()");
     printf("Expect addr = 0, counter = 0");
-    find_next_chunk(&next_chunk_addr, &next_chunk_counter);
-    printf("Found next chunk at address: %" PRIu32 "\n", next_chunk_addr);
-    printf("Next counter value: %" PRIu32 "\n", next_chunk_counter);
+    find_next_chunk(next_chunk_addr, next_chunk_counter);
+    printf("Found next chunk at address: %" PRIu32 "\n", *next_chunk_addr);
+    printf("Next counter value: %" PRIu32 "\n", *next_chunk_counter);
 }
 
 
