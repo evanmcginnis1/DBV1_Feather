@@ -59,8 +59,6 @@ void set_loop_rate(uint32_t loop_rate_hz);
 /* Private defines -----------------------------------------------------------*/
 #define LED_BUILTIN_Pin GPIO_PIN_1
 #define LED_BUILTIN_GPIO_Port GPIOC
-#define FLASH_CS_Pin GPIO_PIN_15
-#define FLASH_CS_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
 #define LOOP_TIM_TICK_RATE_HZ 1000000
