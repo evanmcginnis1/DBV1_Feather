@@ -20,7 +20,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "adc.h"
 #include "dma.h"
 #include "i2c.h"
 #include "spi.h"
@@ -36,8 +35,13 @@
 #include "DShot.h"
 #include "iBus.h"
 #include "pid.h"
+#include "state.h"
+#include "USB_Handler.h"
+#include "FlightLogger.h"
+#include "GD25Q16.h"
 #include <math.h>
 #include <usbd_cdc_if.h>
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -61,9 +65,7 @@
 volatile bool loop_ready_flag = 0;
 
 //USB virtual COM variables
-extern uint8_t UserRxBufferFS[APP_RX_DATA_SIZE];
-extern uint8_t uart_newdata_received;
-extern uint8_t uart_receive_len;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -77,6 +79,14 @@ void set_loop_rate(uint32_t loop_rate_hz) {
 
   __HAL_TIM_SET_PRESCALER(MAIN_LOOP_TIM, tim_PSC);
   __HAL_TIM_SET_AUTORELOAD(MAIN_LOOP_TIM, tim_ARR);
+}
+
+//overwrite weak function so that printf works with serial port
+int _write(int file, char *ptr, int len) {
+  while (CDC_Transmit_FS((uint8_t *)ptr, len) == USBD_BUSY) {
+        HAL_Delay(1);
+    }
+    return len;
 }
 /* USER CODE END PFP */
 
@@ -99,8 +109,11 @@ int main(void)
   /* USER CODE BEGIN 1 */
   IMU_Model_t imu_model;
   //write all ones to ibus_data array so that 
-  uint16_t ibus_data[IBUS_NUM_CHANNELS];
-  uint16_t esc_commands[4] = {0};
+  uint16_t ibus_data_pcts[IBUS_NUM_CHANNELS];
+  uint16_t esc_commands_pcts[4] = {0};
+  Quadcopter_State_t state = SOFT_DISARM;
+  bool disarm_locked = false;
+  User_USB_Commands_t user_command;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -122,7 +135,6 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_DMA_Init();
-  MX_ADC1_Init();
   MX_I2C1_Init();
   MX_SPI1_Init();
   MX_USART1_UART_Init();
@@ -134,51 +146,93 @@ int main(void)
 
 
   set_loop_rate(100);
+  /*
   dshot_init(DSHOT300);
   ibus_init(IBUS_UART);
   IMU_init(&hi2c1);
   pid_init();
+  */
+  while(1) {
+    test_flash_functions();
+    HAL_Delay(10000);
+  }
   //need to start timer explicitly to run interrupt-based main loop 
   HAL_TIM_Base_Start_IT(MAIN_LOOP_TIM);
+  //run_usb_tests();
+  //for debugging without controller
+  state = HARD_DISARM;
+  disarm_locked = true;
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    if (uart_newdata_received) {
-      uart_newdata_received = 0;
-      pid_update_gains(UserRxBufferFS);
-
-    }
-    //only run loop if it has been enough time since last cycle
     if (loop_ready_flag) {
       loop_ready_flag = 0;
+      //IMU_update_model(&imu_model);
+      //ibus_read_as_percents(ibus_data);
 
-      IMU_update_model(&imu_model);
-      ibus_read_as_percents(ibus_data);
-      //failsafe check sets all inputs to zero
+      //update_state(ibus_data, &imu_model, &disarm_locked, &state);
 
-      if (ibus_failsafe_check(ibus_data) && ibus_is_armed(ibus_data)) {
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
-        pid_update(&imu_model, ibus_data, esc_commands);
-        dshot_write_from_percents(esc_commands);
+      switch(state) {
+        case ARMED: 
+            if (ibus_failsafe_check(ibus_data_pcts)) {
+              HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
+              pid_update(&imu_model, ibus_data_pcts, esc_commands_pcts);
+              dshot_write_from_percents(esc_commands_pcts);
+            }
+          break;
 
-      } else {
-        //send zero throttle signal if quadcopter is disarmed
-        dshot_disarm();
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
-        // check if user is trying to update pid gains via usb virtual com port. If so, update gains.
-        if (uart_newdata_received) {
-          uart_newdata_received = 0;
-          pid_update_gains(UserRxBufferFS);
-          //delay for safety
-          HAL_Delay(3000);
+        case HARD_DISARM:
+        // if just waiting for user to flip arm switch to disarmed, don't enforce 10s delay or check serial input
+        if (!disarm_locked) {
+          break;
         }
+          user_command = INVALID_COMMAND;
+          while (disarm_locked) {
+            //dshot_disarm();
+            //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
+            user_command = get_usb_command();
+            uart_data_ready = false;
+
+            switch (user_command) {
+              case DOWNLOAD_LOGS:
+              //TODO: Implement
+                ;
+                break;
+              case UPDATE_PID_GAINS:
+                pid_update_gains();
+                break;
+              case UNLOCK:
+                unlock_state(&disarm_locked);
+                break;
+              case INVALID_COMMAND: 
+                printf("\nTry again\n");
+                break;
+            }
+
+          // require affirmative user input to re-arm
+          // print list of options every 3 seconds: 
+          // re-arm (10s delay)
+          // download logs
+          // update PID gains
+          // check UART buffer for user command
+          // if user commands to release disarm, reset disarm_locked flag
+
+          }
+          HAL_Delay(10000);
+          break;
+        case SOFT_DISARM: 
+          //fall through (default to disarmed)
+          //only requires flipping ARM switch to re-arm
+        default: 
+          dshot_disarm();
+          HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
+          break;
       }
     }
-  } 
-    
+  }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
