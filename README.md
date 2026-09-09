@@ -25,7 +25,7 @@ Articles I wrote explaining my thought process through key decisions
 [Why use DShot Protocol?]
 
 ## Architecture
-The firmware uses the Model-Conductor-Hardware (MCH) framework for the two sub-systems that I forsee being most likely to change in the future: the IMU and the flash chip. This framework isolates the register-level hardware interface from the rest of the program, so that if I swap either of these two components, I only need to change the Hardware-layer file, and not everything else on top of it. 
+The firmware uses the Model-Conductor-Hardware (MCH) framework for the IMU sub-system, since it is the one most likely to change in the future. This framework isolates the register-level hardware interface from the rest of the program, so that if I switch to a new IMU, I only need to change the Hardware-layer file, and not everything else on top of it. While the flash chip may also be swapped at some point, there is much more variability in how I would interface with different flash chips (NAND vs NOR flash, block sizes, and read/write command sequences). Because of this, I opted to keep the flash functions contained in a single file, rather than splitting them up. 
 * __Hardware__: register-level interactions with peripherals reflecting datasheet information
 * __Conductor__: Intermediate layer, calls hardware functions to update the model, but has no low-level knowledge
 * __Model__: High-level, just a container of data for other sub-systems to interact with
