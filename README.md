@@ -20,7 +20,7 @@ Currently, the project lies in the testing phase, where I am dialing in the PID 
 ## Development Notes
 Articles I wrote explaining my thought process through key decisions
 
-[Safety-Focused Serial Interface Development](Articles/DBV1_Safety-focused_Serial_Interface_Development.md)
+[Safety-Focused Serial Interface Development](Articles/DBV1_Safety-Focused_Serial_Interface_Development.md)
 
 [Why use DShot Protocol?]
 
