@@ -72,6 +72,9 @@ Seems like I have my work cut out for me.
 
 
 ## Acknowledgements
-Alexander Agarwal: advice on quadcopter hardware components, brainstorming help
-Mohwassi (github link): Posted repo implementing DShot and iBus, used as general framework to help figure out DMA transactions especially
-drone guy on medium: showed that designing a flight controller from scratch is actually possible, inspired me to do the same
+
+[Eunhye Seok/Mokhwaqsomssi](https://github.com/mokhwasomssi): Posted repo implementing DShot and iBus, used as general framework to help figure out how to implement DMA transactions
+
+Tim Hanewich: Posted [articles](https://timhanewich.medium.com/my-greatest-engineering-accomplishment-the-scout-flight-controller-d8937fb45b24) on Medium explaining his process of building a flight controller himself. Proved that this project and provided a general framework for me to follow.
+
+Alexander Agrawal: advice on quadcopter hardware components, brainstorming help
