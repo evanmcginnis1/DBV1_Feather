@@ -1,10 +1,8 @@
-## DBV1 Feather
+# DBV1 Feather
 
 The DBV1 Feather is a quadcopter built for the primary purpose of developing my familiarity with embedded systems. The name, rather unoriginally, stands for Drone Build Version 1: Feather, with the Feather moniker reflecting he Adafruit STM32F405 Feather Express MCU breakout board that this project is built upon. 
 
 Currently, the project lies in the testing phase, where I am dialing in the PID gain constants via a combination of trial-and-error, and quantitative flight log debugging. The primary goal at this stage of development is to achieve a hover for ten seconds.
-
-
 
 ## Skills
 * C Programming
@@ -16,10 +14,7 @@ Currently, the project lies in the testing phase, where I am dialing in the PID 
 	* Implemented DShot & iBus protocol from spec
 * Using logic analyzer to debug I2C, DShot signals
 * PCB design for IMU mount
-* 
-## Development Notes
-Articles I wrote explaining my thought process through key decisions
-[[DBV1 Safety-focused Serial Interface Development]]
+
 
 ## Architecture
 The firmware uses the Model-Conductor-Hardware (MCH) framework for the two sub-systems that I forsee being most likely to change in the future: the IMU and the flash chip. This framework isolates the register-level hardware interface from the rest of the program, so that if I swap either of these two components, I only need to change the Hardware-layer file, and not everything else on top of it. 
@@ -37,6 +32,13 @@ The rest of the firmware consists of straightforward protocol implementations an
 * Flight data collection and logging via flash memory
 * Serial interface: PID gain updates on-the-fly + flight data download capability
 [picture of quad]
+
+## Deep Dives
+Articles I wrote explaining my thought process throughout development
+
+[DBV1 Safety-focused Serial Interface Development](DBV1_Safety-focused_Serial_Interface_Development.md)
+
+
 ## Lessons Learned 
 
 The main thing that I've learned is that I need to dedicate even more time to the planning phase of a project, before I even start building. My goal was to finish this project over the summer between my first and second year at the University of Michigan, but that short timeframe led me rush through important steps. 
@@ -60,7 +62,6 @@ The ICM-42688-P comes in a surface-mount package, so I will need to fabricate an
 
 I should also design a full-fledged PCB. Using breakout boards is convenient and speeds up development, but they take up a lot of space, and wiring ends up very messy. The PCB would include: a buck converter, voltage divider for measuring battery voltage, STM32F405 MCU, IMU, USB connector for programming, and a JST connector for connecting to the ESC. Ideally, this PCB should fit in the 30.5x30.5mm flight stack like a real, off-the-shelf flight controller.
 
-Seems like I have my work cut out for me.
 ### Long-term ideas: 
 (These will likely take a long time to develop, but would be super cool)
 * Battery voltage reporting
