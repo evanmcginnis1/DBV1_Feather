@@ -3,7 +3,7 @@
  *
  *  Created on: May 16, 2026
  *      Author: Evan McGinnis
- *      High-level model for BNO055 IMU
+ *      High-level model for BNO055 IMU containing data only
  */
 
  #ifndef IMU_MODEL_H_

@@ -3,6 +3,7 @@
  *
  *  Created on: May 16, 2026
  *      Author: Evan McGinnis
+ * Updates IMU model with hardware data
  */
 
 #ifndef IMU_CONDUCTOR_H_
