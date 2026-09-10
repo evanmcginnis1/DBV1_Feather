@@ -58,9 +58,11 @@ bool ibus_read_as_percents(uint16_t* ibus_data_percents);
  */
 bool ibus_is_armed(const uint16_t* ibus_data_percents);
 /*
- * Requires: HAL_UART_RxCpltCallback function is implemented to reset failsafe flag every time it is triggered
+ * Requires: HAL_UART_RxCpltCallback function is implemented to reset failsafe flag every time it is triggered. Ibus 
+ *           data is in percent format
  * Modifies: ibus_data
- * Effects: Failsafe for if reciever packets are stale (does not cover transmitter power loss). Sets all channels to zero
+ * Effects: Failsafe for if reciever packets are stale (does not cover transmitter power loss). Sets all channels to 
+ *          zero. Increments failsafe flag by one every call
  */
 bool ibus_failsafe_check(uint16_t* ibus_data);
 

@@ -12,6 +12,7 @@
 
 #include <stdint.h>
 #include "IMU_Model.h"
+#include <stdbool.h>
 
 #define PID_PITCH_KP 0.2
 #define PID_PITCH_KI 0
@@ -69,9 +70,9 @@ void pid_init(void);
 /*
  * Requires: uart_data has been populated with message from serial port containing new pid gain value
  * Modifies: PID loop gain variables
- * Effects: Updates PID 
+ * Effects: Updates PID. Returns true if update is confirmed, returns false if invalid input or user cancels
  */
-void pid_update_gains(void);
+bool pid_update_gains(void);
 
 /*
  * Requires: USB port is availale
@@ -87,6 +88,6 @@ Modifies: esc_commands_pct array
 Effects:  Outputs four values (ranged 0-1000) into esc_commands_pct array
 */
 
-void pid_update(const IMU_Model_t* imu_data, const uint16_t* pilot_command, uint16_t* esc_commands_pct);
+void pid_update(const IMU_Model_t* imu_data, const uint16_t* pilot_commands, uint16_t* esc_commands_pct, float* setpoint_output);
 
 #endif
