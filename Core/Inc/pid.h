@@ -88,6 +88,6 @@ Modifies: esc_commands_pct array
 Effects:  Outputs four values (ranged 0-1000) into esc_commands_pct array
 */
 
-void pid_update(const IMU_Model_t* imu_data, const uint16_t* pilot_command, uint16_t* esc_commands_pct);
+void pid_update(const IMU_Model_t* imu_data, const uint16_t* pilot_commands, uint16_t* esc_commands_pct, float* setpoint_output);
 
 #endif

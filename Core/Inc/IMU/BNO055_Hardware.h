@@ -6,8 +6,6 @@
  *      Low-level code to directly modify registers on BNO055 IMU. Doesn't use static functions to enable easier testing
  */
 
- //TODO: add IMU self-test function??
- //
 #ifndef IMU_HARDWARE_H_
 #define IMU_HARDWARE_H_
 

@@ -14,7 +14,6 @@
   * If no LICENSE file comes with this software, it is provided AS-IS.
   *
   ******************************************************************************
-  TODO: Only allow ARM when throttle set to zero
   */
 
 /* USER CODE END Header */
@@ -37,7 +36,7 @@
 #include "pid.h"
 #include "state.h"
 #include "USB_Handler.h"
-#include "FlightLogger.h"
+#include "FlightLogger_Model.h"
 #include "GD25Q16.h"
 #include <math.h>
 #include <usbd_cdc_if.h>
@@ -114,6 +113,7 @@ int main(void)
   Quadcopter_State_t state = SOFT_DISARM;
   bool disarm_locked = false;
   User_USB_Commands_t user_command;
+  float setpoint_output[NUM_MOTORS] = {0};
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -158,10 +158,7 @@ int main(void)
   }
   //need to start timer explicitly to run interrupt-based main loop 
   HAL_TIM_Base_Start_IT(MAIN_LOOP_TIM);
-  //run_usb_tests();
-  //for debugging without controller
-  state = HARD_DISARM;
-  disarm_locked = true;
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -185,10 +182,10 @@ int main(void)
           break;
 
         case HARD_DISARM:
-        // if just waiting for user to flip arm switch to disarmed, don't enforce 10s delay or check serial input
-        if (!disarm_locked) {
-          break;
-        }
+          // if just waiting for user to flip arm switch to disarmed, don't enforce 10s delay or check serial input
+          if (!disarm_locked) {
+            break;
+          }
           user_command = INVALID_COMMAND;
           while (disarm_locked) {
             //dshot_disarm();

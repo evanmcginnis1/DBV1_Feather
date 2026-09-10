@@ -18,7 +18,7 @@
    //settings information
    Quadcopter_State_t current_state;
    //convert to timestamp
-   uint16_t data_counter;
+   uint16_t entry_counter;
 
    //data that pid loop is based on
    float pitch_angle;

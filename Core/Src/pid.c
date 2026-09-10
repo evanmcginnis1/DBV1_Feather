@@ -115,12 +115,13 @@ https://timhanewich.medium.com/how-i-developed-the-scout-flight-controller-part-
  * @param esc_commands_pct Array to store output
  *
 */
-void pid_update(const IMU_Model_t* imu, const uint16_t* pilot_command, uint16_t* esc_commands_pct) {
+void pid_update(const IMU_Model_t* imu, const uint16_t* pilot_command, uint16_t* esc_commands_pct, float* setpoint_output) {
     float setpoint[NUM_MOTORS];
 
     pilot_command_to_setpoint(pilot_command, setpoint);
     pid_step_all(imu, setpoint);
     synthesize_pid_commands(&setpoint[2], esc_commands_pct);
+    memcpy(setpoint_output, setpoint, sizeof(float) * NUM_MOTORS);
 }
 
 
