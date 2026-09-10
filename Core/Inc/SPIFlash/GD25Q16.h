@@ -4,6 +4,7 @@
  * Created on: August 20, 2026
  * Author: Evan McGinnis
  * 
+ * 
  */
 
  #ifndef GD25Q16_H
@@ -25,9 +26,7 @@
 #define FLASH_BLOCK_SIZE_64 0x010000
 #define FLASH_CHUNK_SIZE_64 (2 * FLASH_BLOCK_SIZE_64)
 #define FLASH_PAGE_SIZE_BYTES 256
-#define FLASH_METADATA_SIZE_PAGES 1
 
-#define FLASH_METADATA_SIZE_BYTES (FLASH_METADATA_SIZE_PAGES * FLASH_PAGE_SIZE_BYTES)
 #define FLASH_SPI_TIMEOUT_MS 2
 //each chunk is two 64k byte blocks
 #define FLASH_NUM_CHUNKS 16
@@ -45,12 +44,15 @@
 #define COMMAND_PAGE_PROGRAM 0x02
 #define COMMAND_READ_DATA 0x03
 
-/* 
- * Requires: Flash chip 
- * Modifies: current_page_addr and current_block_addr
- * Effects: Adds 5ms delay for flash chip power up time, finds chunk of two blocks to write to
+
+/*
+ * Requires: Flash chip has booted up
+ * Modifies: next_block_addr, next_block_counter
+ * Effects: Searches through flash memory metadata to find latest entry, then updates 
+ *          next_chunk_addr to one block after that and next_chunk_counter to one more than the previous counter
  */
-void flash_init(PID_t* pitch_info, PID_t* roll_info, PID_t* yaw_info);
+void find_next_chunk(uint32_t* next_chunk_addr, uint32_t* next_chunk_counter);
+
 
 /*
  * Requires: WEL bit has been set. Page has been erased already. WIP bit is not set. data MUST be an array of 256 bytes
@@ -65,6 +67,17 @@ void page_program(const uint32_t* addr, const uint16_t size, const uint8_t* data
  * Effects: updates data with the data that is read from flash
  */
 void read_flash_data(const uint32_t* start_addr, const uint16_t num_bytes_to_read, uint8_t* data);
+
+/*
+ * Requires: new_block_addr is the address of the block to write current log to, points to chunk of two erased blocks
+             WIP flag is cleared
+ * Modifies: first page of new block, CS pin, SPI bus
+ * Effects: Writes metadata on first page of new chunk of blocks used for flight log. Only writes to first page of first 
+ *          block, not second block. 
+ */
+void write_metadata(const uint32_t* new_chunk_addr, const uint32_t* new_chunk_counter, const PID_t* pitch_info, 
+                                const PID_t* roll_info, const PID_t* yaw_info);
+
 
 void test_flash_functions(void);
 
