@@ -1,5 +1,5 @@
 # Overview
-Dshot is a protocol for communication between a flight controller and ESC. It features error-checking, high resolution, and very high data rates. It can run at DShot150, DShot300, DShot600,
+Dshot is a protocol for communication between a flight controller and ESC. It features error-checking, high resolution, and very high data rates.
 
 ![DShot Spec Timing info](../Assets/DShot_Timing_Info.png)
 
