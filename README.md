@@ -81,7 +81,6 @@ I should also design a full-fledged PCB. Using breakout boards is convenient and
 
 Seems like I have my work cut out for me.
 ### Long-term ideas: 
-(These will likely take a long time to develop, but would be super cool)
 
 - RPM-filtered IMU data: use bidirectional DShot communication with ESC to calculate the amount of vibration produced by the motors at a given RPM, and subtract that vibration out of the IMU data
 - Add AM32 passthrough for programming ESCs directly via flight controller, instead of having to unplug ESC every time
