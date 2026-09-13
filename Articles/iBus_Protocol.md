@@ -43,21 +43,15 @@ Read 32 byte UART packets using DMA, then decode them and send commands to FC
 
 ## FS i6 Channel Mapping (AETR)
 
-| Channel Number | Plane Function | Quad Function |
-| -------------- | -------------- | ------------- |
-| 1              | Aileron        | Roll          |
-| 2              | Elevator       | Pitch         |
-| 3              | Throttle       | Throttle      |
-| 4              | Rudder         | Yaw           |
-| 5              | Aux1           | unused        |
-| 6              | Aux2           | unused        |
+| Channel Number |  Quad Function |
+| -------------- |  ------------- |
+| 1              | Roll           |
+| 2              | Pitch          |
+| 3              | Throttle       |
+| 4              | Yaw            |
+| 5              | Soft-disarm    |
+| 6              | hard-disarm    |
 
 # References
 https://github.com/mokhwasomssi/stm32_hal_ibus
 https://thenerdyengineer.com/ibus-and-arduino/#iBus_protocol_Description
-
-
-# Tags
-#DBV1/comms
-
-
