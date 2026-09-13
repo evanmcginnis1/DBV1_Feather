@@ -1,6 +1,6 @@
 ## DBV1 Feather
 
-The DBV1 Feather is a quadcopter built for the primary purpose of developing my familiarity with embedded systems. The name, rather unoriginally, stands for Drone Build Version 1: Feather, with the Feather moniker reflecting he Adafruit STM32F405 Feather Express MCU breakout board that this project is built upon. 
+The DBV1 Feather is a quadcopter built for the primary purpose of developing my familiarity with embedded systems. The name stands for Drone Build Version 1: Feather, with the Feather naming reflecting he Adafruit STM32F405 Feather Express MCU breakout board that this project is built upon. 
 
 Currently, the project lies in the testing phase, where I am dialing in the PID gain constants via a combination of trial-and-error, and quantitative flight log debugging. The primary goal at this stage of development is to achieve a hover for ten seconds.
 
