@@ -4,7 +4,7 @@ The DBV1 Feather is a quadcopter built for the primary purpose of developing my 
 
 Currently, the project lies in the testing phase, where I am dialing in the PID gain constants via a combination of trial-and-error, and quantitative flight log debugging. The primary goal at this stage of development is to achieve a hover for ten seconds.
 
-
+![Motor Testing Demo](Assets/Motor_testing.gif)
 
 ## Skills
 - C Programming
