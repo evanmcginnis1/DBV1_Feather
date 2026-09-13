@@ -6,7 +6,8 @@ Currently, the project lies in the testing phase, where I am dialing in the PID 
 
 <p float="center">
 	<img src = "Assets/Quad_photo.jpeg" width = 40%>
-  <img src="Assets/Motor_testing_cropped.gif" width="25%">
+	<img src = "Assets/IMU_Image.jpeg" width = 30%>
+  	<img src="Assets/Motor_testing_cropped.gif" width="25%">
 </p>
 
 ## Skills
