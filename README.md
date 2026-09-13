@@ -22,8 +22,6 @@ Articles I wrote explaining my thought process through key decisions
 
 [Safety-Focused Serial Interface Development](Articles/DBV1_Safety-Focused_Serial_Interface_Development.md)
 
-[Why use DShot Protocol?]
-
 ## Architecture
 The firmware uses the Model-Conductor-Hardware (MCH) framework for the IMU and SPIFlash sub-systems, since these are the components most likely to change in the future. This framework isolates the register-level hardware interface from the rest of the program, so that if I switch to a new IMU or flash chip, I only need to change the Hardware-layer file, and not everything else on top of it. 
 * __Hardware__: register-level interactions with peripherals reflecting datasheet information
