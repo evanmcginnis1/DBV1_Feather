@@ -28,6 +28,8 @@ Articles I wrote explaining my thought process through key decisions
 
 [iBus Protocol Overview](Articles/iBus_Protocol.md)
 
+[DShot Protocol Overview](Articles/DShot_Protocol.md)
+
 ## Features
 - Remote-control pilot input & stabilization via PID loop
 	- Pitch, roll axes are angle-controlled, yaw is rate controlled by pilot
