@@ -1,7 +1,9 @@
 # Overview
 Dshot is a protocol for communication between a flight controller and ESC. It features error-checking, high resolution, and very high data rates. It can run at DShot150, DShot300, DShot600,
 
-![[DShot Timing Info.png]]^[https://betaflight.com/docs/development/API/Dshot]
+![DShot Spec Timing info](../Assets/DShot_Timing_Info.png)
+
+(^Table from: https://betaflight.com/docs/development/API/Dshot)
 
 # Frame Structure
 * 2 bytes total
@@ -12,11 +14,6 @@ Dshot is a protocol for communication between a flight controller and ESC. It fe
 * 4 bit CRC
 * 2 µs break between frames to indicate frame reset BUT can be much longer
 	* make break between frames longer to sync with PID loop
-
-# CRC Calculation
-CRC = (value ^ (value >> 4) ^ (value >> 8)) & 0x0F
-* uses [[Glossary#XOR| XOR operator]] and three copies of value to ensure that CRC most likely changes if any bit changes
-* Value = First 12 bits of frame (throttle + telemetry request bit)
 
 # Arming Sequence
 Can differ by implementation, but most of the time, a 0 is expected for some period of time
@@ -42,7 +39,7 @@ Tick length = 140 ticks/bit
 Tick Frequency = 84MHz
 T1H = 105 ticks
 T0H: 53 ticks
-### DShot600 Timings for Various Tick Frequencies
+### DShot600 Timings and Error vs Spec for Various Tick Frequencies
 
 | Tick Frequency (MHz) | PSC | Tick Length (bits/s) | T1H (µs) | T1H error (%) | T0H (µs) | T0H error (%) |
 | -------------------- | --- | -------------------- | -------- | ------------- | -------- | ------------- |
@@ -62,15 +59,18 @@ T0H: 53 ticks
 	* DShot150: PSC= 4
 ## 3. Start PWM for each channel
 ## 4. Calculate CRC
-See [[#CRC Calculation]]
-## 4. Put data in DMA Buffer
+CRC = (value ^ (value >> 4) ^ (value >> 8)) & 0x0F
+* uses XOR operator and three copies of value to ensure that CRC most likely changes if any bit changes
+* Value = First 12 bits of frame (throttle + telemetry request bit)
+
+## 5. Put data in DMA Buffer
 1. Read through each bit in the throttle buffer
 	1. If a bit is a 1, write 105 into dmabuf
 	2. if bit is a 0, write 53 into dmabuf
 ## 5. Start DMA
 Tell DMA controller to send data 
 
-# Actual DShot Timings for DBV1 Feather (84MHz TIM_CLK)
+## Expected DShot Timings for DBV1 Feather Using 84MHz TIM_CLK (For Logic Analyzer Verification)
 
 | DShot | Bitrate   | Tick Frequency | Tick Period | T1H (µs) | T0H (µs) | Bit (µs) | Frame (µs) |
 | ----- | --------- | -------------- | ----------- | -------- | -------- | -------- | ---------- |
@@ -80,11 +80,13 @@ Tell DMA controller to send data
 
 # References
 https://blck.mn/2016/11/dshot-the-new-kid-on-the-block/ 
-https://github.com/mokhwasomssi/stm32_hal_dshot/tree/main (MIT License)
-https://betaflight.com/docs/development/API/Dshot
-https://www.swallenhardware.io/battlebots/2019/4/20/a-developers-guide-to-dshot-escs
-https://brushlesswhoop.com/dshot-and-bidirectional-dshot/#frame-structure
-https://docs.px4.io/main/en/peripherals/dshot
 
-# Tags
-#DBV1/esc 
+https://github.com/mokhwasomssi/stm32_hal_dshot/tree/main (MIT License)
+
+https://betaflight.com/docs/development/API/Dshot
+
+https://www.swallenhardware.io/battlebots/2019/4/20/a-developers-guide-to-dshot-escs
+
+https://brushlesswhoop.com/dshot-and-bidirectional-dshot/#frame-structure
+
+https://docs.px4.io/main/en/peripherals/dshot
