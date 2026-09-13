@@ -70,16 +70,13 @@ See [[#CRC Calculation]]
 ## 5. Start DMA
 Tell DMA controller to send data 
 
-# Actual DShot Timings (84MHz TIM_CLK)
+# Actual DShot Timings for DBV1 Feather (84MHz TIM_CLK)
 
 | DShot | Bitrate   | Tick Frequency | Tick Period | T1H (µs) | T0H (µs) | Bit (µs) | Frame (µs) |
 | ----- | --------- | -------------- | ----------- | -------- | -------- | -------- | ---------- |
 | 150   | 150kbit/s | 21 MHz         | 0.048µs     | 5        | 2.52     | 6.67     | 106.66     |
 | 300   | 300kbit/s | 42 MHz         | 0.024µs     | 2.50     | 1.262    | 3.33     | 53.33      |
 | 600   | 600kbit/s | 84 MHz         | 0.012µs     | 1.25     | 0.63     | 1.67     | 26.66      |
-
-
-
 
 # References
 https://blck.mn/2016/11/dshot-the-new-kid-on-the-block/ 
@@ -88,8 +85,6 @@ https://betaflight.com/docs/development/API/Dshot
 https://www.swallenhardware.io/battlebots/2019/4/20/a-developers-guide-to-dshot-escs
 https://brushlesswhoop.com/dshot-and-bidirectional-dshot/#frame-structure
 https://docs.px4.io/main/en/peripherals/dshot
-
-[[DShot Debugging]]
 
 # Tags
 #DBV1/esc 
