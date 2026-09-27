@@ -53,7 +53,7 @@
 
  typedef struct {
    //ticks up forever, allow automatic overflow to wraparound to zero
-   uint32_t chunk_counter;
+   uint32_t log_counter;
    uint32_t packet_version;
 
     float pitch_proportional_gain;

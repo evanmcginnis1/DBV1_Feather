@@ -26,6 +26,7 @@
 #define FLASH_BLOCK_SIZE_64 0x010000
 #define FLASH_CHUNK_SIZE_64 (2 * FLASH_BLOCK_SIZE_64)
 #define FLASH_PAGE_SIZE_BYTES 256
+#define FLASH_CHUNK_EMPTY UINT32_MAX
 
 #define FLASH_SPI_TIMEOUT_MS 2
 //each chunk is two 64k byte blocks
@@ -43,7 +44,6 @@
 #define COMMAND_BLOCK_ERASE_64 0xD8
 #define COMMAND_PAGE_PROGRAM 0x02
 #define COMMAND_READ_DATA 0x03
-
 
 /*
  * Requires: Flash chip has booted up
@@ -69,6 +69,15 @@ void page_program(const uint32_t* addr, const uint16_t size, const uint8_t* data
 void read_flash_data(const uint32_t* start_addr, const uint16_t num_bytes_to_read, uint8_t* data);
 
 /*
+ * Requires: Flash chip has booted up. Target is an even numbered block
+ * Modifies: Updates counter value based on metadata in block
+ * Effects: Reads first four bytes of block for counter value. Returns true and updates counter if block has metadata. 
+            returns false if block is completely erased(has no metadata) (Careful: could also be caused by alignment issue). 
+ */
+bool flash_get_metadata_counter(uint8_t chunk_number, uint32_t* counter);
+
+
+/*
  * Requires: new_block_addr is the address of the block to write current log to, points to chunk of two erased blocks
              WIP flag is cleared
  * Modifies: first page of new block, CS pin, SPI bus
@@ -81,5 +90,11 @@ void write_metadata(const uint32_t* new_chunk_addr, const uint32_t* new_chunk_co
 
 void test_flash_functions(void);
 
-
+/*
+ * Requires: chunk_map_list is an array with size FLASH_NUM_CHUNKS, WIP flag not set
+ * Modifies: chunk_map_list, flash read
+ * Effects: each index in chunk_map_list represents a chunk. Writes -1 to index if no data found. If data found, writes 
+            its metadata number at the given index
+ */
+void get_chunk_map(uint32_t* chunk_map_list);
  #endif

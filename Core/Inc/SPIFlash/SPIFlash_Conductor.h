@@ -14,6 +14,7 @@
 #include "FlightLogger_Model.h"
 #include "IMU_Model.h"
 #include "State.h"
+#include "stm32f405xx.h"
 
 #define ENTRIES_PER_PAGE 4
 #define FLASH_METADATA_SIZE_PAGES ((sizeof(FlightLogger_Metadata_t) + FLASH_PAGE_SIZE_BYTES - 1) / FLASH_PAGE_SIZE_BYTES)
@@ -43,3 +44,19 @@ bool flash_add_entry(const Quadcopter_State_t* current_state, const IMU_Model_t*
                     const float* pilot_setpoint, const uint16_t* raw_motor_commands, 
                     const uint16_t* normalized_motor_commands);
 
+//TODO: add function to return a list of all logs available on flash chip; indexes metadata into a 2D array
+
+/*
+ * Requires: log_count is the number of logs to read (1 just outputs most recent, 2 outputs most recent two, etc.)
+ * Modifies: 
+ * Effects: Returns false if log_count is greater than number of logs available
+ */
+//bool flash_output_data(uint16_t log_count, 
+
+/*
+ * Requires: WIP flag not set
+ * Modifies: UART
+ * Effects: prints visual depiction of which memory chunks have data in them, and which data is there
+ */
+
+ void flash_print_memory_map(void);

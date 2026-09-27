@@ -23,8 +23,6 @@
 
 //static function declarations
 
-
-
 /* 
  * Requires: WEL bit has been set
  * Modifies: chunk that address points to
@@ -41,20 +39,14 @@ static void erase_chunk(const uint32_t* chunk_start_addr);
 static void erase_block(const uint32_t* block_addr);
 
 /*
- * Requires: Flash chip has booted up. Target is an even numbered block
- * Modifies: Updates counter value based on metadata in block
- * Effects: Reads first four bytes of block for counter value. Returns true and updates counter if block has metadata. 
-            returns false if block is completely erased(has no metadata) (Careful: could also be caused by alignment issue). 
- */
-static bool get_metadata_counter(const uint32_t* block_start_addr, uint32_t* counter);
-
-/*
  * Requires: Nothing
  * Modifies: Nothing
  * Effects: Reads metadata. Returns true if data found and updates metadata object. Otherwise, 
-            returns false if block is empty
+            returns false if chunk is empty or invalid start addr given
  */
-static bool read_metadata(const uint32_t* block_start_addr, FlightLogger_Metadata_t* metadata);
+static bool read_metadata(const uint32_t* chunk_start_addr, FlightLogger_Metadata_t* metadata);
+
+
 
 //helper functions
 /*
@@ -124,7 +116,7 @@ static void test_write_header(uint32_t* next_chunk_addr, uint32_t* next_chunk_co
     if (!read_metadata(next_chunk_addr, &metadata)) {
         printf("Metadata not found at %" PRIu32 "\n", *next_chunk_addr);
     } else {
-        if (metadata.chunk_counter == *next_chunk_counter) {
+        if (metadata.log_counter == *next_chunk_counter) {
             printf("Metadata found and counter matches!\n");
             printf("Pid pitch: %3f , roll: %3f, yaw: %3f \n", metadata.pitch_proportional_gain, 
                     metadata.roll_proportional_gain, metadata.yaw_proportional_gain);
@@ -132,8 +124,6 @@ static void test_write_header(uint32_t* next_chunk_addr, uint32_t* next_chunk_co
             printf("Metadata corrupted...\n");
         }
     }
-
-    return;
 }
 
 
@@ -188,11 +178,10 @@ void find_next_chunk(uint32_t* next_chunk_base_addr, uint32_t* next_chunk_counte
     //check all chunks even if first one is empty just in case
     for (int chunk = 0; chunk < FLASH_NUM_CHUNKS; chunk += 1) {
         uint32_t counter;
-        uint32_t current_chunk_start_addr = FLASH_CHUNK_SIZE_64 * chunk;
         bool current_chunk_is_erased;
 
         //clean up
-        current_chunk_is_erased = !get_metadata_counter(&current_chunk_start_addr, &counter);
+        current_chunk_is_erased = !flash_get_metadata_counter(chunk, &counter);
 
         // update counter from current block and check if the current block is erased or not
         if (current_chunk_is_erased) {
@@ -252,10 +241,11 @@ static bool read_metadata(const uint32_t* block_start_addr, FlightLogger_Metadat
     return data_found;
 }
 
-static bool get_metadata_counter(const uint32_t* block_start_addr, uint32_t* counter) {
+bool flash_get_metadata_counter(uint8_t chunk_number, uint32_t* counter) {
     FlightLogger_Metadata_t metadata;
-    if (read_metadata(block_start_addr, &metadata)) {
-        *counter = metadata.chunk_counter;
+    uint32_t block_start_addr = chunk_number * FLASH_CHUNK_SIZE_64;
+    if (read_metadata(&block_start_addr, &metadata)) {
+        *counter = metadata.log_counter;
         return true;
     }
     return false;
@@ -265,7 +255,7 @@ static bool get_metadata_counter(const uint32_t* block_start_addr, uint32_t* cou
 void write_metadata(const uint32_t* new_chunk_addr, const uint32_t* new_chunk_counter, const PID_t* pitch_info, 
                                 const PID_t* roll_info, const PID_t* yaw_info) {
     FlightLogger_Metadata_t metadata = {
-                                        .chunk_counter = *new_chunk_counter, 
+                                        .log_counter = *new_chunk_counter, 
                                         .packet_version = PACKET_VERSION, 
                                         .pitch_proportional_gain = pitch_info->kp, 
                                         .pitch_integrator_gain = pitch_info->ki, 
@@ -370,3 +360,13 @@ static void cs_pin_high(void) {
     HAL_GPIO_WritePin(FLASH_CS_PORT, FLASH_CS_PIN_NUMBER, GPIO_PIN_SET);
 }
 
+
+void get_chunk_map(uint32_t* chunk_map_list) {
+    // populate chunk_map_list
+    for (int chunk = 0; chunk < 16; chunk++) {
+        //updates the value in the array if data found
+        if (!flash_get_metadata_counter(chunk, &chunk_map_list[chunk])) {
+            chunk_map_list[chunk] = FLASH_CHUNK_EMPTY;
+        }
+    }
+}
