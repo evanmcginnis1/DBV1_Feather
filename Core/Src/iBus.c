@@ -4,6 +4,12 @@
  * Created on: July 15, 2026
  * Author: Evan McGinnis
  * 
+ *  This file includes code partially derived from: 
+ *  stm32_hal_ibus
+ *  Copyright (c) 2023 Eunhye Seok 
+ *  Licensed under The MIT License per written permission obtained on 9/13/2026
+ *  Source: https://github.com/mokhwasomssi/stm32_hal_ibus
+ * 
  * Code to decode iBus protocol from reciever in order to be read by flight controller
  */
 #include <ibus.h>
