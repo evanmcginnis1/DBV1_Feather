@@ -29,7 +29,7 @@
  * Modifies: current_page_addr and current_block_addr
  * Effects: Adds 5ms delay for flash chip power up time, finds chunk of two blocks to write to
  */
-void flash_init(PID_t* pitch_info, PID_t* roll_info, PID_t* yaw_info);
+void flash_init(const PID_t* pitch_info, const PID_t* roll_info, const PID_t* yaw_info);
 
 
 /*
@@ -57,8 +57,9 @@ void flash_get_metadata(uint32_t log_number, FlightLogger_Metadata_t* metadata);
  NOTE: chunk_map_list must be of size FLASH_NUM_CHUNKS, and it will be overwritten
  */
 
-void flash_print_memory_map(uint32_t* chunk_map_list);
+void flash_print_memory_map(const uint32_t* chunk_map_list);
 
+const uint32_t* flash_get_chunk_map_list(void);
 /*
  * Requires: log_number is between 0 and UINT32_MAX, log_number is valid (i.e. appears in chunk map)
  * Modifies: nothing
@@ -69,7 +70,7 @@ int get_chunk_number_by_log(uint32_t log_number);
 /*
  * Requires: log_number is a reference to an existing log, not WIP, metadata is write-only, data is write-only
  * Modifies: metadata, data
- * Effects: reads chunk into metadata and data arrays
+ * Effects: reads chunk into metadata and data arrays. Returns false if invalid log number is given
  */
-void flash_read_datapoint(uint32_t log_number, uint16_t entry_number, FlightLog_Packet_t* data);
+bool flash_read_datapoint(uint32_t log_number, uint16_t entry_number, FlightLog_Packet_t* data);
 

@@ -66,7 +66,7 @@ static void print_flightlog_metadata_header(void);
  * Effects: Prompts user to select the log that they want and returns chosen log number. If user chooses invalid log,
             return INVALID_LOG_CHOICE
  */
-static uint32_t select_log_to_download(const uint32_t* chunk_map_list);
+static uint32_t select_log_to_download(void);
 
 /**************************************************** */
 
@@ -179,7 +179,7 @@ User_USB_Commands_t get_usb_command(void) {
     //if uart_buffer data is too long, command is invalid
     User_USB_Commands_t user_command;
     //make entry all lowercase, leave non alphabetical characters alone
-    normalize_input(uart_buffer, &uart_receive_len);
+    normalize_input(uart_buffer, &len);
     //if uart_buffer data is too long, command is invalid
     if (!add_null_terminator(uart_buffer, &len)) {
         return INVALID_COMMAND;
@@ -327,9 +327,10 @@ static void normalize_input(uint8_t* input, const uint32_t* Len) {
     }
 }
 
-static uint32_t select_log_to_download(const uint32_t* chunk_map_list) {
+static uint32_t select_log_to_download(void) {
+    const uint32_t* chunk_map_list = flash_get_chunk_map_list();
     uint8_t input_buffer[APP_RX_DATA_SIZE];
-    printf("Which log would you like to download?");
+    printf("Which log would you like to download?\n");
     wait_for_user_input(10);\
     uart_data_ready = false;
     //use memcpy to prevent volatile UserRxBuffer changing while using it
@@ -342,7 +343,7 @@ static uint32_t select_log_to_download(const uint32_t* chunk_map_list) {
     int max_log_number = max_in_list(chunk_map_list, FLASH_NUM_CHUNKS);
     int min_log_number = min_in_list(chunk_map_list, FLASH_NUM_CHUNKS);
 
-    if (user_choice > max_log_number || user_choice < min_log_number) {
+    if (user_choice > max_log_number || user_choice < min_log_number || user_choice == UINT32_MAX) {
         //replace with named constant
         return INVALID_LOG_CHOICE;
     } else {
@@ -356,13 +357,11 @@ static uint32_t select_log_to_download(const uint32_t* chunk_map_list) {
  * Modifies: 
  * Effects: 
  */
- //TODO: implement
+ //TODO: switch to full log indexing
 static void transmit_logs(uint32_t log_number) {
     //read selected log into an array of type FlightLog_packet_t with size FLIGHTLOG_MAX_ENTRIES
-    FlightLog_Packet_t flight_data[FLIGHTLOG_MAX_ENTRIES];
     FlightLogger_Metadata_t metadata;
-    uint32_t log_start_addr = log_number_to_chunk_addr(log_number);
-    flash_read_metadata(&log_start_addr, &metadata);
+    flash_get_metadata(log_number, &metadata);
     print_flightlog_metadata_header();
     print_metadata(&metadata);
     print_flightlog_data_header();
@@ -370,22 +369,23 @@ static void transmit_logs(uint32_t log_number) {
     for (int i = 0; i < FLIGHTLOG_MAX_ENTRIES; i++) {
         FlightLog_Packet_t datapoint;
         flash_read_datapoint(log_number, i, &datapoint);
-        print_flightlog_datapoint(&flight_data[i]);
+        print_flightlog_datapoint(&datapoint);
     }
 }
 
 
 void download_logs(void) {
-    uint32_t chunk_map_list[FLASH_NUM_CHUNKS];
+    const uint32_t* chunk_map_list = flash_get_chunk_map_list();
+    printf("Input log number of log that you would like to download. Highest log number corresponds to most recent data. \n");
     flash_print_memory_map(chunk_map_list);
-
-    uint32_t user_choice = select_log_to_download(chunk_map_list);
+    
+    uint32_t user_choice = select_log_to_download();
     //wait for valid input
     while (user_choice == INVALID_LOG_CHOICE) {
         uint32_t min = min_in_list(chunk_map_list, FLASH_NUM_CHUNKS);
         uint32_t max = max_in_list(chunk_map_list, FLASH_NUM_CHUNKS);
         printf("Invalid log selection. Choice must be between %" PRIu32 " and %" PRIu32 "\n", min, max);
-        user_choice = select_log_to_download(chunk_map_list);
+        user_choice = select_log_to_download();
     }
 
     transmit_logs(user_choice);
@@ -415,7 +415,7 @@ static void print_flightlog_datapoint(const FlightLog_Packet_t* datapoint) {
             datapoint->pitch_command_angle, datapoint->roll_command_angle, datapoint->yaw_command_rate, 
             datapoint->throttle_command, datapoint->m1_output_raw, datapoint->m2_output_raw, datapoint->m3_output_raw, 
             datapoint->m4_output_raw, datapoint->m1_output_normalized, datapoint->m2_output_normalized,
-            datapoint->m3_output_normalized, datapoint->m1_output_normalized); 
+            datapoint->m3_output_normalized, datapoint->m4_output_normalized); 
 }
 
 static const char* flight_state_to_string(const Quadcopter_State_t* state) {
