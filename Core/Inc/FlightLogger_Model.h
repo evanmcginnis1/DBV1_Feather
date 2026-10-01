@@ -14,6 +14,7 @@
 
  #define PACKET_VERSION 1
  
+ //MUST be of size 64
  typedef struct {
    //settings information
    Quadcopter_State_t current_state;

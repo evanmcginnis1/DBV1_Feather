@@ -176,7 +176,7 @@ int main(void)
         case ARMED: 
             if (ibus_failsafe_check(ibus_data_pcts)) {
               HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
-              pid_update(&imu_model, ibus_data_pcts, esc_commands_pcts);
+              pid_update(&imu_model, ibus_data_pcts, esc_commands_pcts, setpoint_output);
               dshot_write_from_percents(esc_commands_pcts);
             }
           break;
@@ -186,6 +186,7 @@ int main(void)
           if (!disarm_locked) {
             break;
           }
+
           user_command = INVALID_COMMAND;
           while (disarm_locked) {
             //dshot_disarm();
@@ -196,7 +197,8 @@ int main(void)
             switch (user_command) {
               case DOWNLOAD_LOGS:
               //TODO: Implement
-                ;
+              ;
+
                 break;
               case UPDATE_PID_GAINS:
                 pid_update_gains();
