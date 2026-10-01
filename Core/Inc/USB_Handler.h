@@ -17,6 +17,8 @@
 
 
 #define UPPERCASE_TO_LOWERCASE_DIFFERENCE 32
+#define INVALID_LOG_CHOICE UINT32_MAX
+//add erase_flash option
 typedef enum {
     DOWNLOAD_LOGS,
     UPDATE_PID_GAINS,

@@ -7,13 +7,13 @@
  */
 
 #include "USB_Handler.h"
+#include "GD25Q16.h"
 #include "State.h"
 #include <string.h>
 #include "usbd_cdc_if.h"
-
-
-
-
+#include "SPIFlash_Conductor.h"
+#include "Helper_Functions.h"
+#include <inttypes.h>
 
 //static functions
 
@@ -43,7 +43,11 @@ static void normalize_input(uint8_t* input, const uint32_t* Len);
 static void prompt_for_usb_commands(void);
 
 static char* usb_mode_to_string(const User_USB_Commands_t* user_command);
+static const char* flight_state_to_string(const Quadcopter_State_t* state);
 
+static void print_metadata(const FlightLogger_Metadata_t* metadata);
+static void print_flightlog_data_header(void);
+static void print_flightlog_datapoint(const FlightLog_Packet_t* datapoint);
 /*
  * Requires: nothing
  * Modifies: USB TX buffer
@@ -53,7 +57,16 @@ static void send_confirmation_msg(const char* user_command_string);
 
 User_Confirmation_Result_t check_user_confirmation_input(uint8_t uart_buffer[APP_RX_DATA_SIZE], const uint32_t Len);
 
+// "Log Counter, packet_version, Pitch_P, Pitch_I, Pitch_D, Roll_P, Roll_I, Roll_D, Yaw_P, Yaw_I, Yaw_D \n"
+static void print_flightlog_metadata_header(void);
 
+/*
+ * Requires: chunk_map_list is an array of size FLASH_NUM_CHUNKS
+ * Modifies: UART input buffer, 
+ * Effects: Prompts user to select the log that they want and returns chosen log number. If user chooses invalid log,
+            return INVALID_LOG_CHOICE
+ */
+static uint32_t select_log_to_download(const uint32_t* chunk_map_list);
 
 /**************************************************** */
 
@@ -142,7 +155,6 @@ static void test_confirm_usb_input(void) {
 /*************************************************** */
 
 
-
 // Command options: 
 /*
  * update_pid
@@ -216,7 +228,7 @@ static char* usb_mode_to_string(const User_USB_Commands_t* user_command) {
 
 void unlock_state(bool* disarm_locked) {
     if (confirm_user_action("unlock from hard disarm state")) {
-        disarm_locked = false;
+        *disarm_locked = false;
         printf("Unlocked hard disarm. After 10 second delay, quad behavior will reflect arm switch state.\n"
                 "To remain in hard_disarm mode, ensure hard_disarm switch remains flipped down after the delay\n");
     } else {
@@ -315,3 +327,104 @@ static void normalize_input(uint8_t* input, const uint32_t* Len) {
     }
 }
 
+static uint32_t select_log_to_download(const uint32_t* chunk_map_list) {
+    uint8_t input_buffer[APP_RX_DATA_SIZE];
+    printf("Which log would you like to download?");
+    wait_for_user_input(10);\
+    uart_data_ready = false;
+    //use memcpy to prevent volatile UserRxBuffer changing while using it
+    uint32_t len = uart_receive_len;
+    memcpy(input_buffer, UserRxBufferFS, uart_receive_len);
+    add_null_terminator(input_buffer, &len);
+    // cast from unsigned char to char
+    int user_choice = atoi((char*)input_buffer);
+    
+    int max_log_number = max_in_list(chunk_map_list, FLASH_NUM_CHUNKS);
+    int min_log_number = min_in_list(chunk_map_list, FLASH_NUM_CHUNKS);
+
+    if (user_choice > max_log_number || user_choice < min_log_number) {
+        //replace with named constant
+        return INVALID_LOG_CHOICE;
+    } else {
+        return user_choice;
+    }
+
+}
+
+/*
+ * Requires: 
+ * Modifies: 
+ * Effects: 
+ */
+ //TODO: implement
+static void transmit_logs(uint32_t log_number) {
+    //read selected log into an array of type FlightLog_packet_t with size FLIGHTLOG_MAX_ENTRIES
+    FlightLog_Packet_t flight_data[FLIGHTLOG_MAX_ENTRIES];
+    FlightLogger_Metadata_t metadata;
+    uint32_t log_start_addr = log_number_to_chunk_addr(log_number);
+    flash_read_metadata(&log_start_addr, &metadata);
+    print_flightlog_metadata_header();
+    print_metadata(&metadata);
+    print_flightlog_data_header();
+    
+    for (int i = 0; i < FLIGHTLOG_MAX_ENTRIES; i++) {
+        FlightLog_Packet_t datapoint;
+        flash_read_datapoint(log_number, i, &datapoint);
+        print_flightlog_datapoint(&flight_data[i]);
+    }
+}
+
+
+void download_logs(void) {
+    uint32_t chunk_map_list[FLASH_NUM_CHUNKS];
+    flash_print_memory_map(chunk_map_list);
+
+    uint32_t user_choice = select_log_to_download(chunk_map_list);
+    //wait for valid input
+    while (user_choice == INVALID_LOG_CHOICE) {
+        uint32_t min = min_in_list(chunk_map_list, FLASH_NUM_CHUNKS);
+        uint32_t max = max_in_list(chunk_map_list, FLASH_NUM_CHUNKS);
+        printf("Invalid log selection. Choice must be between %" PRIu32 " and %" PRIu32 "\n", min, max);
+        user_choice = select_log_to_download(chunk_map_list);
+    }
+
+    transmit_logs(user_choice);
+}
+
+static void print_flightlog_metadata_header(void) {
+    printf("Log Counter, packet_version, Pitch_P, Pitch_I, Pitch_D, Roll_P, Roll_I, Roll_D, Yaw_P, Yaw_I, Yaw_D \n");
+}
+
+//TODO: Verify Units
+static void print_flightlog_data_header(void) {
+    printf("Current state, Entry Counter, Pitch Angle (deg), Roll Angle (deg), Pitch Rate(dps), Roll Rate (dps)," 
+        "Yaw Rate (dps), Accel X (g), Accel Y (g), Accel Z (g), Pilot Roll Input (%%), Pilot Pitch Input (%%), "
+        "Pilot Throttle Input (%%), Pilot Yaw Input (%%), Raw Motor Command 1, Raw Motor Command 2, Raw Motor Command 3, Raw Motor Command 4, Normalized Motor Command 1, Normalized Motor Command 2, Normalized Motor Command 3, Normalized Motor Command 4 \n");
+}
+
+static void print_metadata(const FlightLogger_Metadata_t* metadata) {
+    printf("%" PRIu32 ", %" PRIu32 ", %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f \n", metadata->log_counter, metadata->packet_version, 
+            metadata->pitch_proportional_gain, metadata->pitch_integrator_gain, metadata->pitch_derivative_gain, 
+            metadata->roll_proportional_gain, metadata->roll_integrator_gain, metadata->roll_derivative_gain,
+            metadata->yaw_proportional_gain, metadata->yaw_integrator_gain, metadata->yaw_derivative_gain);
+}
+
+static void print_flightlog_datapoint(const FlightLog_Packet_t* datapoint) {
+    printf("%s, %" PRIu16 ", %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 "\n", flight_state_to_string(&datapoint->current_state), datapoint->entry_counter,
+            datapoint->pitch_angle, datapoint->roll_angle, datapoint->pitch_rate, datapoint->roll_rate, datapoint->yaw_rate,
+            datapoint->pitch_command_angle, datapoint->roll_command_angle, datapoint->yaw_command_rate, 
+            datapoint->throttle_command, datapoint->m1_output_raw, datapoint->m2_output_raw, datapoint->m3_output_raw, 
+            datapoint->m4_output_raw, datapoint->m1_output_normalized, datapoint->m2_output_normalized,
+            datapoint->m3_output_normalized, datapoint->m1_output_normalized); 
+}
+
+static const char* flight_state_to_string(const Quadcopter_State_t* state) {
+    switch (*state) {
+        case ARMED: return "ARMED";
+        
+        case SOFT_DISARM: return "SOFT_DISARM";
+        
+        case HARD_DISARM: return "HARD_DISARM";
+        default: return "UNKNOWN";
+    }
+}
