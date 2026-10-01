@@ -23,13 +23,6 @@
 
 //static function declarations
 
-/* 
- * Requires: 
- * Modifies: chunk that address points to
- * Effects: Erases chunk (set of 2 consecutive blocks)
- */
-static void erase_chunk(const uint32_t* chunk_start_addr);
-
 /*
  * Requires: WIP flag in reset state (i.e. flash chip not busy)
  * Modifies: block on flash chip
@@ -71,12 +64,6 @@ static void send_flash_command_and_addr_packet(uint8_t command, const uint32_t* 
  */
 static void wait_for_WIP_reset(void);
 
-/*
- * Requires: Nothing
- * Modifies: CS pin
- * Effects: Returns true if block has not been written to, otherwise returns false
- */
-static bool chunk_is_erased(const uint32_t* chunk_addr);
 
 /*
  * Requires: CS pin is low already, status register lower byte read command has been sent
@@ -88,52 +75,6 @@ static void update_WIP_flag(bool* WIP_flag_set);
 static void cs_pin_high(void);
 static void cs_pin_low(void);
 
-static void test_find_next_chunk(uint32_t* next_chunk_addr, uint32_t* next_chunk_counter);
-static void test_write_header(uint32_t* next_chunk_addr, uint32_t* next_chunk_counter);
-
-
-
-static void test_write_header(uint32_t* next_chunk_addr, uint32_t* next_chunk_counter) {
-    PID_t pitch_info = {5};
-    PID_t roll_info = {10.1};
-    PID_t yaw_info = {15.5};
-    FlightLogger_Metadata_t metadata;
-    printf("Testing SPIFlash function write_header():\n");
-    wait_for_WIP_reset();
-    write_metadata(next_chunk_addr, next_chunk_counter, &pitch_info, &roll_info, &yaw_info);
-    if (!flash_read_metadata(next_chunk_addr, &metadata)) {
-        printf("Metadata not found at %" PRIu32 "\n", *next_chunk_addr);
-    } else {
-        if (metadata.log_counter == *next_chunk_counter) {
-            printf("Metadata found and counter matches!\n");
-            printf("Pid pitch: %3f , roll: %3f, yaw: %3f \n", metadata.pitch_proportional_gain, 
-                    metadata.roll_proportional_gain, metadata.yaw_proportional_gain);
-        } else {
-            printf("Metadata corrupted...\n");
-        }
-    }
-}
-
-
-void test_flash_functions(void) {
-    uint32_t next_chunk_addr;
-    uint32_t next_chunk_counter;
-    test_find_next_chunk(&next_chunk_addr, &next_chunk_counter);
-    printf("\n");
-    test_write_header(&next_chunk_addr, &next_chunk_counter);
-    printf("\n");
-}
-
-static void test_find_next_chunk(uint32_t* next_chunk_addr, uint32_t* next_chunk_counter) {
-    printf("Testing SPIFlash function find_next_chunk()\n");
-    wait_for_WIP_reset();
-    find_next_chunk(next_chunk_addr, next_chunk_counter);
-    printf("Found next chunk at address: %" PRIu32 "\n", *next_chunk_addr);
-    printf("Next counter value: %" PRIu32 "\n", *next_chunk_counter);
-}
-
-
-
 void page_program(const uint32_t* addr, const uint16_t size_bytes, const uint8_t* data) {
     wait_for_WIP_reset();
     write_enable();
@@ -144,7 +85,7 @@ void page_program(const uint32_t* addr, const uint16_t size_bytes, const uint8_t
     return;
 }
 
-void flash_read(const uint32_t* start_addr, const uint16_t num_bytes_to_read, uint8_t* data) {
+void flash_read_raw(const uint32_t* start_addr, const uint16_t num_bytes_to_read, uint8_t* data) {
     
     wait_for_WIP_reset();
 
@@ -155,117 +96,18 @@ void flash_read(const uint32_t* start_addr, const uint16_t num_bytes_to_read, ui
     return;
 }
 
-void find_next_chunk(uint32_t* next_chunk_base_addr, uint32_t* next_chunk_counter) {
+//block_addr is a 24-bit address
+static void erase_block(const uint32_t* block_addr) {
 
-    //counter is total number of datapoints that have been written
-    uint32_t newest_counter = 0;
-    //index is just a number that loops from 0 to FLASH_NUM_CHUNKS (idx = newest_counter % FLASH_NUM_CHUNKS)
-    uint32_t newest_chunk_idx = 0;
-    bool found_data = false;
+    write_enable();
+    cs_pin_low();
+    send_flash_command_and_addr_packet(COMMAND_BLOCK_ERASE_64, block_addr);
+    cs_pin_high();
 
-
-    //check all chunks even if first one is empty just in case
-    for (int chunk = 0; chunk < FLASH_NUM_CHUNKS; chunk += 1) {
-        uint32_t counter;
-        bool current_chunk_is_erased;
-
-        //clean up
-        current_chunk_is_erased = !flash_get_metadata_counter(chunk, &counter);
-
-        // update counter from current block and check if the current block is erased or not
-        if (current_chunk_is_erased) {
-            //found free block; ;
-            continue;
-        } 
-        // if haven't found any data yet (0th index case) or found a newer datapoint, set the focus on the new chunk
-        if (!found_data || counter > newest_counter) {
-            found_data = true;
-            // counter is total number of datapoints that have been written
-            newest_counter = counter;
-            newest_chunk_idx = chunk;
-        }
-    }
-    
-    //case where chip is completely erased
-    if (!found_data) {
-        //means flash chip is totally erased, so start at zero
-        *next_chunk_counter = 0;
-        *next_chunk_base_addr = 0x00;
-        return;
-    }
-
-    // modulo only ever has an effect when flash chip wants to write to very last index; it will then write to the zeroeth index instead
-    uint32_t next_chunk_idx = (newest_chunk_idx + 1) % FLASH_NUM_CHUNKS;
-
-    *next_chunk_base_addr = next_chunk_idx * FLASH_CHUNK_SIZE_64;
-    // all cases update next chunk counter in the same way, so just have this be a fallthrough for all
-    *next_chunk_counter = newest_counter + 1;
-
-    // once find a non-erased chunk, all of the following chunks will be also not erased, so the flag stays valid
-    if (!chunk_is_erased(next_chunk_base_addr)) {
-        erase_chunk(next_chunk_base_addr);
-        wait_for_WIP_reset();
-        printf("Erased chunk at address %" PRIu32 "\n", *next_chunk_base_addr);
-    }
     return;
 }
 
-
-bool flash_read_metadata(const uint32_t* block_start_addr, FlightLogger_Metadata_t* metadata) {
-    uint8_t buf[sizeof(*metadata)];
-    bool data_found = false;
-    flash_read(block_start_addr, sizeof(FlightLogger_Metadata_t), buf);
-    
-    // check if there is any data written to metadata section of current block
-    for (size_t current_byte = 0; current_byte < sizeof(FlightLogger_Metadata_t); current_byte++) {
-        // 0xFF is erased state for NOR flash
-        if (buf[current_byte] != 0xFF) {
-            data_found = true;
-            break;
-        }
-    }
-    if (data_found) {
-        memcpy(metadata, buf, sizeof(*metadata));
-    }
-    //return true if there's data, false if there's not
-    return data_found;
-}
-
-bool flash_get_metadata_counter(uint8_t chunk_number, uint32_t* counter) {
-    FlightLogger_Metadata_t metadata;
-    uint32_t block_start_addr = chunk_number * FLASH_CHUNK_SIZE_64;
-    if (flash_read_metadata(&block_start_addr, &metadata)) {
-        *counter = metadata.log_counter;
-        return true;
-    }
-    return false;
-
-}
-
-void write_metadata(const uint32_t* new_chunk_addr, const uint32_t* new_chunk_counter, const PID_t* pitch_info, 
-                                const PID_t* roll_info, const PID_t* yaw_info) {
-    FlightLogger_Metadata_t metadata = {
-                                        .log_counter = *new_chunk_counter, 
-                                        .packet_version = PACKET_VERSION, 
-                                        .pitch_proportional_gain = pitch_info->kp, 
-                                        .pitch_integrator_gain = pitch_info->ki, 
-                                        .pitch_derivative_gain = pitch_info->kd,
-                                        .roll_proportional_gain = roll_info->kp,
-                                        .roll_integrator_gain = roll_info->ki,
-                                        .roll_derivative_gain = roll_info->kd,
-                                        .yaw_proportional_gain = yaw_info->kp,
-                                        .yaw_integrator_gain = yaw_info->ki,
-                                        .yaw_derivative_gain = yaw_info->kd
-                                        };
-                                        //todo: add crc calculation
-    write_enable();
-    //&metadata is a pointer to metadata object. Cast tells compiler to treat that pointer as though it were pointing to
-    //  a group of bytes instead
-    page_program(new_chunk_addr, sizeof(metadata), (uint8_t*)&metadata);
-    return; 
-}
-
-static void erase_chunk(const uint32_t* chunk_start_addr){
+void erase_chunk(const uint32_t* chunk_start_addr) {
     uint32_t block_1 = *chunk_start_addr;
     uint32_t block_2 = *chunk_start_addr + FLASH_BLOCK_SIZE_64;
 
@@ -313,22 +155,10 @@ static void send_flash_command_and_addr_packet(uint8_t command, const uint32_t* 
     HAL_SPI_Transmit(FLASH_SPI, packet_output, 4, FLASH_SPI_TIMEOUT_MS);
 }
 
-//block_addr is a 24-bit address
-static void erase_block(const uint32_t* block_addr) {
 
-    write_enable();
-    cs_pin_low();
-    send_flash_command_and_addr_packet(COMMAND_BLOCK_ERASE_64, block_addr);
-    cs_pin_high();
-
-    return;
-}
 
 //status checking functions
-static bool chunk_is_erased(const uint32_t* chunk_addr) {
-    FlightLogger_Metadata_t dummy;
-    return !flash_read_metadata(chunk_addr, &dummy);
-}
+
 
 static void update_WIP_flag(bool* WIP_flag_set) {
     uint8_t status_lower_byte;
@@ -350,27 +180,3 @@ static void cs_pin_high(void) {
     HAL_GPIO_WritePin(FLASH_CS_PORT, FLASH_CS_PIN_NUMBER, GPIO_PIN_SET);
 }
 
-
-void get_chunk_map_list(uint32_t* chunk_map_list) {
-    // populate chunk_map_list
-    for (int chunk = 0; chunk < 16; chunk++) {
-        //updates the value in the array if data found
-        if (!flash_get_metadata_counter(chunk, &chunk_map_list[chunk])) {
-            chunk_map_list[chunk] = FLASH_CHUNK_EMPTY;
-        }
-    }
-}
-
-uint32_t log_number_to_chunk_addr(uint32_t log_number) {
-    uint32_t chunk_map_list[FLASH_NUM_CHUNKS];
-    get_chunk_map_list(chunk_map_list);
-    
-    for (int i = 0; i < FLASH_NUM_CHUNKS; i++) {
-        if (chunk_map_list[i] == log_number) {
-            return i * FLASH_CHUNK_SIZE_64;
-        }
-    }
-    //return flash_chunk_empty if can't find the chunk
-    //not good
-    return FLASH_CHUNK_EMPTY;
-}

@@ -22,6 +22,8 @@
 #define FLASH_METADATA_SIZE_BYTES (FLASH_METADATA_SIZE_PAGES * FLASH_PAGE_SIZE_BYTES)
 #define FLIGHTLOG_MAX_ENTRIES ((FLASH_CHUNK_SIZE_64 - FLASH_METADATA_SIZE_BYTES) / sizeof(FlightLog_Packet_t))
 
+
+
 /* 
  * Requires: Flash chip 
  * Modifies: current_page_addr and current_block_addr
@@ -45,15 +47,9 @@ bool flash_add_entry(const Quadcopter_State_t* current_state, const IMU_Model_t*
                     const float* pilot_setpoint, const uint16_t* raw_motor_commands, 
                     const uint16_t* normalized_motor_commands);
 
-//TODO: add function to return a list of all logs available on flash chip; indexes metadata into a 2D array
 
-/*
- * Requires: log_count is the number of logs to read (1 just outputs most recent, 2 outputs most recent two, etc.)
- * Modifies: 
- * Effects: Returns false if log_count is greater than number of logs available
- */
-//bool flash_output_data(uint16_t log_count, 
 
+void flash_get_metadata(uint32_t log_number, FlightLogger_Metadata_t* metadata);
 /*
  * Requires: WIP flag not set
  * Modifies: UART
@@ -75,7 +71,5 @@ int get_chunk_number_by_log(uint32_t log_number);
  * Modifies: metadata, data
  * Effects: reads chunk into metadata and data arrays
  */
- //deprecated
-//bool flash_read_chunk(uint32_t log_number, FlightLogger_Metadata_t* metadata, FlightLog_Packet_t* data);                                             
-
 void flash_read_datapoint(uint32_t log_number, uint16_t entry_number, FlightLog_Packet_t* data);
+
