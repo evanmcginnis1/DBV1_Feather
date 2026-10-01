@@ -24,7 +24,7 @@
 //static function declarations
 
 /* 
- * Requires: WEL bit has been set
+ * Requires: 
  * Modifies: chunk that address points to
  * Effects: Erases chunk (set of 2 consecutive blocks)
  */
@@ -37,16 +37,6 @@ static void erase_chunk(const uint32_t* chunk_start_addr);
  * NOTE: does not wait for erase to complete
  */
 static void erase_block(const uint32_t* block_addr);
-
-/*
- * Requires: Nothing
- * Modifies: Nothing
- * Effects: Reads metadata. Returns true if data found and updates metadata object. Otherwise, 
-            returns false if chunk is empty or invalid start addr given
- */
-static bool read_metadata(const uint32_t* chunk_start_addr, FlightLogger_Metadata_t* metadata);
-
-
 
 //helper functions
 /*
@@ -98,8 +88,6 @@ static void update_WIP_flag(bool* WIP_flag_set);
 static void cs_pin_high(void);
 static void cs_pin_low(void);
 
-
-
 static void test_find_next_chunk(uint32_t* next_chunk_addr, uint32_t* next_chunk_counter);
 static void test_write_header(uint32_t* next_chunk_addr, uint32_t* next_chunk_counter);
 
@@ -113,7 +101,7 @@ static void test_write_header(uint32_t* next_chunk_addr, uint32_t* next_chunk_co
     printf("Testing SPIFlash function write_header():\n");
     wait_for_WIP_reset();
     write_metadata(next_chunk_addr, next_chunk_counter, &pitch_info, &roll_info, &yaw_info);
-    if (!read_metadata(next_chunk_addr, &metadata)) {
+    if (!flash_read_metadata(next_chunk_addr, &metadata)) {
         printf("Metadata not found at %" PRIu32 "\n", *next_chunk_addr);
     } else {
         if (metadata.log_counter == *next_chunk_counter) {
@@ -147,15 +135,16 @@ static void test_find_next_chunk(uint32_t* next_chunk_addr, uint32_t* next_chunk
 
 
 void page_program(const uint32_t* addr, const uint16_t size_bytes, const uint8_t* data) {
-    cs_pin_low();
     wait_for_WIP_reset();
+    write_enable();
+    cs_pin_low();
     send_flash_command_and_addr_packet(COMMAND_PAGE_PROGRAM, addr);
     HAL_SPI_Transmit(FLASH_SPI, data, size_bytes, FLASH_SPI_TIMEOUT_MS);
     cs_pin_high();
     return;
 }
 
-void read_flash_data(const uint32_t* start_addr, const uint16_t num_bytes_to_read, uint8_t* data) {
+void flash_read(const uint32_t* start_addr, const uint16_t num_bytes_to_read, uint8_t* data) {
     
     wait_for_WIP_reset();
 
@@ -215,16 +204,17 @@ void find_next_chunk(uint32_t* next_chunk_base_addr, uint32_t* next_chunk_counte
     // once find a non-erased chunk, all of the following chunks will be also not erased, so the flag stays valid
     if (!chunk_is_erased(next_chunk_base_addr)) {
         erase_chunk(next_chunk_base_addr);
+        wait_for_WIP_reset();
         printf("Erased chunk at address %" PRIu32 "\n", *next_chunk_base_addr);
     }
     return;
 }
 
 
-static bool read_metadata(const uint32_t* block_start_addr, FlightLogger_Metadata_t* metadata) {
+bool flash_read_metadata(const uint32_t* block_start_addr, FlightLogger_Metadata_t* metadata) {
     uint8_t buf[sizeof(*metadata)];
     bool data_found = false;
-    read_flash_data(block_start_addr, sizeof(FlightLogger_Metadata_t), buf);
+    flash_read(block_start_addr, sizeof(FlightLogger_Metadata_t), buf);
     
     // check if there is any data written to metadata section of current block
     for (size_t current_byte = 0; current_byte < sizeof(FlightLogger_Metadata_t); current_byte++) {
@@ -244,7 +234,7 @@ static bool read_metadata(const uint32_t* block_start_addr, FlightLogger_Metadat
 bool flash_get_metadata_counter(uint8_t chunk_number, uint32_t* counter) {
     FlightLogger_Metadata_t metadata;
     uint32_t block_start_addr = chunk_number * FLASH_CHUNK_SIZE_64;
-    if (read_metadata(&block_start_addr, &metadata)) {
+    if (flash_read_metadata(&block_start_addr, &metadata)) {
         *counter = metadata.log_counter;
         return true;
     }
@@ -337,7 +327,7 @@ static void erase_block(const uint32_t* block_addr) {
 //status checking functions
 static bool chunk_is_erased(const uint32_t* chunk_addr) {
     FlightLogger_Metadata_t dummy;
-    return !read_metadata(chunk_addr, &dummy);
+    return !flash_read_metadata(chunk_addr, &dummy);
 }
 
 static void update_WIP_flag(bool* WIP_flag_set) {
@@ -361,7 +351,7 @@ static void cs_pin_high(void) {
 }
 
 
-void get_chunk_map(uint32_t* chunk_map_list) {
+void get_chunk_map_list(uint32_t* chunk_map_list) {
     // populate chunk_map_list
     for (int chunk = 0; chunk < 16; chunk++) {
         //updates the value in the array if data found
@@ -369,4 +359,18 @@ void get_chunk_map(uint32_t* chunk_map_list) {
             chunk_map_list[chunk] = FLASH_CHUNK_EMPTY;
         }
     }
+}
+
+uint32_t log_number_to_chunk_addr(uint32_t log_number) {
+    uint32_t chunk_map_list[FLASH_NUM_CHUNKS];
+    get_chunk_map_list(chunk_map_list);
+    
+    for (int i = 0; i < FLASH_NUM_CHUNKS; i++) {
+        if (chunk_map_list[i] == log_number) {
+            return i * FLASH_CHUNK_SIZE_64;
+        }
+    }
+    //return flash_chunk_empty if can't find the chunk
+    //not good
+    return FLASH_CHUNK_EMPTY;
 }

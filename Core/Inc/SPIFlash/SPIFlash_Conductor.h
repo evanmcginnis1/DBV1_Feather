@@ -15,6 +15,7 @@
 #include "IMU_Model.h"
 #include "State.h"
 #include "stm32f405xx.h"
+#include <sys/_intsup.h>
 
 #define ENTRIES_PER_PAGE 4
 #define FLASH_METADATA_SIZE_PAGES ((sizeof(FlightLogger_Metadata_t) + FLASH_PAGE_SIZE_BYTES - 1) / FLASH_PAGE_SIZE_BYTES)
@@ -56,7 +57,25 @@ bool flash_add_entry(const Quadcopter_State_t* current_state, const IMU_Model_t*
 /*
  * Requires: WIP flag not set
  * Modifies: UART
- * Effects: prints visual depiction of which memory chunks have data in them, and which data is there
+ * Effects: prints visual depiction of which memory chunks have data in them, and which data is there. 
+ NOTE: chunk_map_list must be of size FLASH_NUM_CHUNKS, and it will be overwritten
  */
 
- void flash_print_memory_map(void);
+void flash_print_memory_map(uint32_t* chunk_map_list);
+
+/*
+ * Requires: log_number is between 0 and UINT32_MAX, log_number is valid (i.e. appears in chunk map)
+ * Modifies: nothing
+ * Effects: returns chunk number that corresponds to given log
+ */
+int get_chunk_number_by_log(uint32_t log_number);
+
+/*
+ * Requires: log_number is a reference to an existing log, not WIP, metadata is write-only, data is write-only
+ * Modifies: metadata, data
+ * Effects: reads chunk into metadata and data arrays
+ */
+ //deprecated
+//bool flash_read_chunk(uint32_t log_number, FlightLogger_Metadata_t* metadata, FlightLog_Packet_t* data);                                             
+
+void flash_read_datapoint(uint32_t log_number, uint16_t entry_number, FlightLog_Packet_t* data);

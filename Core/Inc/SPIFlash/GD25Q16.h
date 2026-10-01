@@ -14,6 +14,8 @@
 #include <stdbool.h>
 #include "SPI.h"
 #include "pid.h"
+#include "FlightLogger_Model.h"
+
 
 //hardware definitions
 #define FLASH_CS_PORT GPIOA
@@ -22,11 +24,15 @@
 
 
 //Misc defines
-//flash chip has either 32 sector or 63 sector blocks
+//flash chip has either 32 sector or 64 sector blocks
 #define FLASH_BLOCK_SIZE_64 0x010000
 #define FLASH_CHUNK_SIZE_64 (2 * FLASH_BLOCK_SIZE_64)
 #define FLASH_PAGE_SIZE_BYTES 256
+
+//#define FLASH_METADATA_CUTOUT_BYTES (1 * FLASH_PAGE_SIZE_BYTES)
 #define FLASH_CHUNK_EMPTY UINT32_MAX
+
+
 
 #define FLASH_SPI_TIMEOUT_MS 2
 //each chunk is two 64k byte blocks
@@ -55,7 +61,7 @@ void find_next_chunk(uint32_t* next_chunk_addr, uint32_t* next_chunk_counter);
 
 
 /*
- * Requires: WEL bit has been set. Page has been erased already. WIP bit is not set. data MUST be an array of 256 bytes
+ * Requires: Page has been erased already. data MUST be an array of 256 bytes
  * Modifies: Page on flash chip that addr points to
  * Effects: Writes data to selected page (intended to write a full page worth of data). 
  */
@@ -66,7 +72,15 @@ void page_program(const uint32_t* addr, const uint16_t size, const uint8_t* data
  * Modifies: 
  * Effects: updates data with the data that is read from flash
  */
-void read_flash_data(const uint32_t* start_addr, const uint16_t num_bytes_to_read, uint8_t* data);
+void flash_read(const uint32_t* start_addr, const uint16_t num_bytes_to_read, uint8_t* data);
+
+/*
+ * Requires: Nothing
+ * Modifies: Nothing
+ * Effects: Reads metadata. Returns true if data found and updates metadata object. Otherwise, 
+            returns false if chunk is empty or invalid start addr given
+ */
+bool flash_read_metadata(const uint32_t* block_start_addr, FlightLogger_Metadata_t* metadata);
 
 /*
  * Requires: Flash chip has booted up. Target is an even numbered block
@@ -96,5 +110,7 @@ void test_flash_functions(void);
  * Effects: each index in chunk_map_list represents a chunk. Writes -1 to index if no data found. If data found, writes 
             its metadata number at the given index
  */
-void get_chunk_map(uint32_t* chunk_map_list);
+void get_chunk_map_list(uint32_t* chunk_map_list);
+
+uint32_t log_number_to_chunk_addr(uint32_t log_number);
  #endif
