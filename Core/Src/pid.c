@@ -103,6 +103,12 @@ void pid_init(void) {
     pid_yaw_info.kd = PID_YAW_KD;
 }
 
+void get_pid_info(PID_t* pitch_axis, PID_t* roll_axis, PID_t* yaw_axis) {
+    *pitch_axis = pid_pitch_info;
+    *roll_axis = pid_roll_info;
+    *yaw_axis = pid_yaw_info;
+}
+
 /* article on quadcopter flight dynamics
 https://timhanewich.medium.com/how-i-developed-the-scout-flight-controller-part-1-quadcopter-flight-dynamics-400af73d21db
 */
