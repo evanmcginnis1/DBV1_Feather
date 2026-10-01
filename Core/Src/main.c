@@ -37,7 +37,7 @@
 #include "state.h"
 #include "USB_Handler.h"
 #include "FlightLogger_Model.h"
-#include "GD25Q16.h"
+#include "SPIFlash_Conductor.h"
 #include <math.h>
 #include <usbd_cdc_if.h>
 
@@ -110,8 +110,8 @@ int main(void)
   //write all ones to ibus_data array so that 
   uint16_t ibus_data_pcts[IBUS_NUM_CHANNELS];
   uint16_t esc_commands_pcts[4] = {0};
-  Quadcopter_State_t state = SOFT_DISARM;
-  bool disarm_locked = false;
+  Quadcopter_State_t state = HARD_DISARM;
+  bool disarm_locked = true;
   User_USB_Commands_t user_command;
   float setpoint_output[NUM_MOTORS] = {0};
   /* USER CODE END 1 */
@@ -150,12 +150,15 @@ int main(void)
   dshot_init(DSHOT300);
   ibus_init(IBUS_UART);
   IMU_init(&hi2c1);
-  pid_init();
   */
-  while(1) {
-    test_flash_functions();
-    HAL_Delay(10000);
-  }
+  //initializes pid_info objects
+  pid_init();
+  //get pointers to static pid_info objects
+  PID_t* pid_pitch;
+  PID_t* pid_roll;
+  PID_t* pid_yaw;
+  get_pid_info(pid_pitch, pid_roll, pid_yaw);
+  flash_init(pid_pitch, pid_roll, pid_yaw);
   //need to start timer explicitly to run interrupt-based main loop 
   HAL_TIM_Base_Start_IT(MAIN_LOOP_TIM);
 
@@ -197,8 +200,7 @@ int main(void)
             switch (user_command) {
               case DOWNLOAD_LOGS:
               //TODO: Implement
-              ;
-
+              download_logs();
                 break;
               case UPDATE_PID_GAINS:
                 pid_update_gains();
