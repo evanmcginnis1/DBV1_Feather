@@ -9,10 +9,10 @@
 #include "State.h"
 #include <stdint.h>
 #include <stdbool.h>
-void update_state(const uint16_t* ibus_data, const IMU_Model_t* imu_data, bool* disarm_locked, Quadcopter_State_t* current_state) {
+void update_state(const uint16_t* ibus_data_pcts, const IMU_Model_t* imu_data, bool* disarm_locked, Quadcopter_State_t* current_state) {
     switch (*current_state) {
         case ARMED:
-            if (ibus_data[4] == 1000) {
+            if (ibus_data_pcts[4] > 800) {
                 *current_state = ARMED;
                 break;
             } else {
@@ -21,20 +21,20 @@ void update_state(const uint16_t* ibus_data, const IMU_Model_t* imu_data, bool* 
                 break;
             }
         case HARD_DISARM: 
-            // arm switch must be in DISARMED position (=2000) in order to exit HARD_DISARM mode
-            if (*disarm_locked || ibus_data[4] != 2000) {
+            // arm switch must be in DISARMED position (down)(=1000) in order to exit HARD_DISARM mode. leave margin for error
+            if (*disarm_locked || ibus_data_pcts[4] > 800) {
                 break;
             } else {
                 *current_state = SOFT_DISARM;
                 break;
             }
         case SOFT_DISARM:
-            if (ibus_data[5] == 1000) {
+            if (ibus_data_pcts[5] > 800) {
                 *current_state = HARD_DISARM;
                 // main loop responsible for unlocking from hard_disarm
                 *disarm_locked = true;
                 break;
-            } else if (ibus_data[4] == 1000) {
+            } else if (ibus_data_pcts[4] > 800) {
                 *current_state = ARMED;
                 break;
             } else {
