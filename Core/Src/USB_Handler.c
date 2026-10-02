@@ -368,7 +368,10 @@ static void transmit_logs(uint32_t log_number) {
     
     for (int i = 0; i < FLIGHTLOG_MAX_ENTRIES; i++) {
         FlightLog_Packet_t datapoint;
-        flash_read_datapoint(log_number, i, &datapoint);
+        if (!flash_read_datapoint(log_number, i, &datapoint)) {
+            printf("End of log. \n");
+            break;
+        }
         print_flightlog_datapoint(&datapoint);
     }
 }
@@ -377,7 +380,7 @@ static void transmit_logs(uint32_t log_number) {
 void download_logs(void) {
     const uint32_t* chunk_map_list = flash_get_chunk_map_list();
     printf("Input log number of log that you would like to download. Highest log number corresponds to most recent data. \n");
-    flash_print_memory_map(chunk_map_list);
+    flash_print_memory_map();
     
     uint32_t user_choice = select_log_to_download();
     //wait for valid input
@@ -397,11 +400,11 @@ static void print_flightlog_metadata_header(void) {
 
 //TODO: Verify Units
 static void print_flightlog_data_header(void) {
-    printf("Current state, Entry Counter, Pitch Angle (deg), Roll Angle (deg), Pitch Rate(dps), Roll Rate (dps)," 
-        "Yaw Rate (dps), Accel X (g), Accel Y (g), Accel Z (g), Pilot Roll Input (%%), Pilot Pitch Input (%%), "
-        "Pilot Throttle Input (%%), Pilot Yaw Input (%%), Raw Motor Command 1, Raw Motor Command 2, Raw Motor Command 3, Raw Motor Command 4, Normalized Motor Command 1, Normalized Motor Command 2, Normalized Motor Command 3, Normalized Motor Command 4 \n");
+    printf("Current state, Entry Counter, Loop dt (us), Battery Voltage (mV), Pitch Angle (deg), Roll Angle (deg), Pitch Rate(dps), Roll Rate (dps)," 
+        "Yaw Rate (dps), Pilot Pitch Input (deg), Pilot Roll Command (deg), Pilot Yaw Input (dps), "
+        "Pilot Throttle Input (%%), PID Pitch Output (%%), PID Roll Output (%%), PID Yaw Output (%%), "
+        "Motor 1 Throttle, Motor 2 Throttle, Motor 3 Throttle, Motor 4 Throttle, crc\n");
 }
-
 static void print_metadata(const FlightLogger_Metadata_t* metadata) {
     printf("%" PRIu32 ", %" PRIu32 ", %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f \n", metadata->log_counter, metadata->packet_version, 
             metadata->pitch_proportional_gain, metadata->pitch_integrator_gain, metadata->pitch_derivative_gain, 
@@ -410,12 +413,13 @@ static void print_metadata(const FlightLogger_Metadata_t* metadata) {
 }
 
 static void print_flightlog_datapoint(const FlightLog_Packet_t* datapoint) {
-    printf("%s, %" PRIu16 ", %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 "\n", flight_state_to_string(&datapoint->current_state), datapoint->entry_counter,
-            datapoint->pitch_angle, datapoint->roll_angle, datapoint->pitch_rate, datapoint->roll_rate, datapoint->yaw_rate,
-            datapoint->pitch_command_angle, datapoint->roll_command_angle, datapoint->yaw_command_rate, 
-            datapoint->throttle_command, datapoint->m1_output_raw, datapoint->m2_output_raw, datapoint->m3_output_raw, 
-            datapoint->m4_output_raw, datapoint->m1_output_normalized, datapoint->m2_output_normalized,
-            datapoint->m3_output_normalized, datapoint->m4_output_normalized); 
+    printf("%s, %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %" PRIi16 ", %" PRIi16 ", %" PRIi16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 "\n", 
+            flight_state_to_string(&datapoint->current_state), datapoint->entry_counter, datapoint->loop_dt_us,
+            datapoint->batt_voltage_mV, datapoint->pitch_angle, datapoint->roll_angle, datapoint->pitch_rate, datapoint->roll_rate, datapoint->yaw_rate,
+            datapoint->pilot_pitch_command_angle, datapoint->pilot_roll_command_angle, datapoint->pilot_yaw_command_rate, 
+            datapoint->pilot_throttle_command, datapoint->pid_pitch_out_pct, datapoint->pid_roll_out_pct, datapoint->pid_yaw_out_pct, 
+            datapoint->m1_output_synthesized, datapoint->m2_output_synthesized,
+            datapoint->m3_output_synthesized, datapoint->m4_output_synthesized); 
 }
 
 static const char* flight_state_to_string(const Quadcopter_State_t* state) {

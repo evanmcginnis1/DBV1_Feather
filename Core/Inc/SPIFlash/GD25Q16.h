@@ -62,7 +62,7 @@ void page_program(const uint32_t* addr, const uint16_t size, const uint8_t* data
 /* 
  * Requires: 
  * Modifies: chunk that address points to
- * Effects: Erases chunk (set of 2 consecutive blocks)
+ * Effects: Erases chunk (set of 2 consecutive blocks). Waits until erase is complete to return
  */
 void erase_chunk(const uint32_t* chunk_start_addr);
 

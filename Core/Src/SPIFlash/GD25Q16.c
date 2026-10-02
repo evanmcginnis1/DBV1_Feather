@@ -116,7 +116,7 @@ void erase_chunk(const uint32_t* chunk_start_addr) {
 
     wait_for_WIP_reset();
     erase_block(&block_2);
-
+    wait_for_WIP_reset();
     return;
 }
 

@@ -67,7 +67,10 @@ Effects: Initializes pid info structs for each axis using defined gain constants
 
 void pid_init(void);
 
-void get_pid_info(PID_t* pitch_info, PID_t* roll_info, PID_t* yaw_info);
+void get_pid_info_pointers(const PID_t** pitch_info, const PID_t** roll_info, const PID_t** yaw_info);
+
+void get_pid_output_pointer(const Pid_Output_t** pid_output_data);
+
 /*
  * Requires: uart_data has been populated with message from serial port containing new pid gain value
  * Modifies: PID loop gain variables

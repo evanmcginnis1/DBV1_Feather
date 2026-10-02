@@ -14,6 +14,7 @@
 #include "FlightLogger_Model.h"
 #include "IMU_Model.h"
 #include "State.h"
+#include "pid.h"
 #include "stm32f405xx.h"
 #include <sys/_intsup.h>
 
@@ -26,12 +27,13 @@
 
 /* 
  * Requires: Flash chip 
- * Modifies: current_page_addr and current_block_addr
- * Effects: Adds 5ms delay for flash chip power up time, finds chunk of two blocks to write to
+ * Modifies: chunk_map_list, pid_out_pcts
+ * Effects: Creates chunk map list, 
  */
-void flash_init(const PID_t* pitch_info, const PID_t* roll_info, const PID_t* yaw_info);
+void flash_init(const Pid_Output_t* pid_outputs);
 
 
+void flash_new_log(const PID_t* pitch_info, const PID_t* roll_info, const PID_t* yaw_info);
 /*
 * Requires: data counter is defined as a static variable in SPIFlash_Conductor.c, motor commands and normalized motor 
             commands each have four elements, pilot_inputs in percent form and are ordered such that: 
@@ -44,8 +46,7 @@ void flash_init(const PID_t* pitch_info, const PID_t* roll_info, const PID_t* ya
             at once to flash chip (so that write entire page at a time)
 */
 bool flash_add_entry(const Quadcopter_State_t* current_state, const IMU_Model_t* imu_data, 
-                    const float* pilot_setpoint, const uint16_t* raw_motor_commands, 
-                    const uint16_t* normalized_motor_commands);
+                    const float* pilot_setpoint, const uint16_t* synthesized_motor_commands);
 
 
 
@@ -57,7 +58,7 @@ void flash_get_metadata(uint32_t log_number, FlightLogger_Metadata_t* metadata);
  NOTE: chunk_map_list must be of size FLASH_NUM_CHUNKS, and it will be overwritten
  */
 
-void flash_print_memory_map(const uint32_t* chunk_map_list);
+void flash_print_memory_map(void);
 
 const uint32_t* flash_get_chunk_map_list(void);
 /*

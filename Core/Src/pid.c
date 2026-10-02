@@ -103,10 +103,14 @@ void pid_init(void) {
     pid_yaw_info.kd = PID_YAW_KD;
 }
 
-void get_pid_info(PID_t* pitch_axis, PID_t* roll_axis, PID_t* yaw_axis) {
-    *pitch_axis = pid_pitch_info;
-    *roll_axis = pid_roll_info;
-    *yaw_axis = pid_yaw_info;
+void get_pid_info_pointers(const PID_t** pitch_axis, const  PID_t** roll_axis, const PID_t** yaw_axis) {
+    *pitch_axis = &pid_pitch_info;
+    *roll_axis = &pid_roll_info;
+    *yaw_axis = &pid_yaw_info;
+}
+
+void get_pid_output_pointer(const Pid_Output_t** pid_output_data) {
+    *pid_output_data = &pid_axis_out_pct;
 }
 
 /* article on quadcopter flight dynamics
