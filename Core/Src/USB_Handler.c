@@ -374,8 +374,12 @@ static void transmit_logs(uint32_t log_number) {
     flash_get_metadata(log_number, &metadata);
     print_flightlog_metadata_header();
     print_metadata(&metadata);
+    if (flash_log_is_empty(log_number)) {
+        printf("Log %" PRIu32 " contains no datapoints.\n", log_number);
+        return;
+    }
     print_flightlog_data_header();
-    
+
     for (int i = 0; i < FLIGHTLOG_MAX_ENTRIES; i++) {
         FlightLog_Packet_t datapoint;
         if (!flash_read_datapoint(log_number, i, &datapoint)) {
@@ -404,19 +408,6 @@ static User_Erase_Type_t user_select_erase_mode(void) {
 
 }
 
-/*
- * Requires: flash chip not WIP
- * Modifies: flash chip, chunk map
- * Effects: Opens a new log so that there is always a log with metadata for the next flight to write to
- */
-static void reopen_log(void) {
-    const PID_t* pid_pitch;
-    const PID_t* pid_roll;
-    const PID_t* pid_yaw;
-    get_pid_info_pointers(&pid_pitch, &pid_roll, &pid_yaw);
-    //also updates memory map
-    flash_new_log(pid_pitch, pid_roll, pid_yaw);
-}
 
 void user_flash_erase(void) {
     flash_print_memory_map();
@@ -425,10 +416,10 @@ void user_flash_erase(void) {
         if (confirm_user_action("erase the entire flash chip (this resets the log counter)")) {
             printf("Erasing chip...\n");
             flash_erase_chip();
-            //currently open log was erased, so start a new one
-            reopen_log();
             printf("Chip erase complete. New memory map:\n");
             flash_print_memory_map();
+            //stored gains were erased along with logs, so have user set them again
+            pid_user_update_all_gains();
         } else {
             return;
         }
@@ -436,8 +427,6 @@ void user_flash_erase(void) {
     } else if (erase_mode == ERASE_LOG) {
         printf("Which log would you like to erase? Type log number\n");
         uint32_t log_number = user_select_log();
-        //highest log number is always the currently open log
-        bool is_open_log = (log_number == get_max_log_number());
 
         printf("You selected log %" PRIu32".\n", log_number);
         if (confirm_user_action("erase this log")) {
@@ -446,9 +435,6 @@ void user_flash_erase(void) {
                 return;
             }
             flash_update_memory_map();
-            if (is_open_log) {
-                reopen_log();
-            }
             printf("Log %" PRIu32 " erase complete. New memory map: \n", log_number);
             flash_print_memory_map();
         } else {
@@ -461,7 +447,8 @@ void user_flash_erase(void) {
 }
 
 void download_logs(void) {
-    printf("Input log number of log that you would like to download. Highest log number corresponds to most recent data. \n");
+    printf("Input log number of log that you would like to download. Highest log number is the open log for the next "
+            "flight, so most recent flight data is in the highest log number without a '*'. \n");
     flash_print_memory_map();
     printf("Which log would you like to download?\n");
     uint32_t user_choice = user_select_log();
@@ -489,13 +476,13 @@ static void print_metadata(const FlightLogger_Metadata_t* metadata) {
 }
 
 static void print_flightlog_datapoint(const FlightLog_Packet_t* datapoint) {
-    printf("%s, %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %" PRIi16 ", %" PRIi16 ", %" PRIi16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 "\n", 
+    printf("%s, %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %" PRIi16 ", %" PRIi16 ", %" PRIi16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 "\n", 
             flight_state_to_string(&datapoint->current_state), datapoint->entry_counter, datapoint->loop_dt_us,
             datapoint->batt_voltage_mV, datapoint->pitch_angle, datapoint->roll_angle, datapoint->pitch_rate, datapoint->roll_rate, datapoint->yaw_rate,
             datapoint->pilot_pitch_command_angle, datapoint->pilot_roll_command_angle, datapoint->pilot_yaw_command_rate, 
             datapoint->pilot_throttle_command, datapoint->pid_pitch_out_pct, datapoint->pid_roll_out_pct, datapoint->pid_yaw_out_pct, 
             datapoint->m1_output_synthesized, datapoint->m2_output_synthesized,
-            datapoint->m3_output_synthesized, datapoint->m4_output_synthesized); 
+            datapoint->m3_output_synthesized, datapoint->m4_output_synthesized, datapoint->crc); 
 }
 
 static const char* flight_state_to_string(const Quadcopter_State_t* state) {

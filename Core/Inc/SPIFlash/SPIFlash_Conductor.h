@@ -32,6 +32,14 @@
  */
 void flash_init(const Pid_Output_t* pid_outputs);
 
+void flash_erase_chip(void);
+
+/*
+ * Requires: chunk map is up to date, not WIP
+ * Modifies: chunk that holds log_number
+ * Effects: Erases the chunk holding the given log. Returns false and erases nothing if log_number is not in chunk map
+ */
+bool flash_erase_log(uint32_t log_number);
 
 void flash_new_log(const PID_t* pitch_info, const PID_t* roll_info, const PID_t* yaw_info);
 /*
@@ -51,6 +59,14 @@ bool flash_add_entry(const Quadcopter_State_t* current_state, const IMU_Model_t*
 
 
 void flash_get_metadata(uint32_t log_number, FlightLogger_Metadata_t* metadata);
+
+/*
+ * Requires: chunk map is up to date, not WIP
+ * Modifies: metadata
+ * Effects: Reads metadata of the log with the highest log number. Returns false and leaves metadata untouched if
+ *          there are no logs on the chip
+ */
+bool flash_get_newest_metadata(FlightLogger_Metadata_t* metadata);
 /*
  * Requires: WIP flag not set
  * Modifies: UART
@@ -59,6 +75,8 @@ void flash_get_metadata(uint32_t log_number, FlightLogger_Metadata_t* metadata);
  */
 
 void flash_print_memory_map(void);
+
+void flash_update_memory_map(void);
 
 const uint32_t* flash_get_chunk_map_list(void);
 /*
@@ -75,3 +93,12 @@ int get_chunk_number_by_log(uint32_t log_number);
  */
 bool flash_read_datapoint(uint32_t log_number, uint16_t entry_number, FlightLog_Packet_t* data);
 
+/*
+ * Requires: chunk map is up to date, not WIP
+ * Modifies: nothing
+ * Effects: Returns true if log has no datapoints (only metadata) or log_number is not in chunk map
+ */
+bool flash_log_is_empty(uint32_t log_number);
+
+uint32_t get_max_log_number(void);
+uint32_t get_min_log_number(void);

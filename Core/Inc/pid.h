@@ -26,6 +26,10 @@
 #define PID_YAW_KI 0
 #define PID_YAW_KD 0
 
+//allowed range for any gain set over serial or loaded from flash
+#define PID_GAIN_MIN 0
+#define PID_GAIN_MAX 20
+
 //dshot throttle ranges from 48 to 2048; 2000 steps
 #define PID_OUTPUT_MAX 500
 #define PID_OUTPUT_IDLE 150
@@ -61,10 +65,11 @@ typedef struct {
 /* 
 Requires: Nothing
 Modifies: pid_x_info structs, where x is pitch, roll, yaw
-Effects: Initializes pid info structs for each axis using defined gain constants. Sets accumulated error and previous 
-         error terms to zero. 
+Requires: flash_init has been called
+Effects: Initializes pid info structs for each axis. Gains are loaded from the metadata of the most recent flight log.
+         If there are no logs (or the stored gains are invalid), uses defined gain constants instead. Sets accumulated
+         error and previous error terms to zero.
 */
-
 void pid_init(void);
 
 void get_pid_info_pointers(const PID_t** pitch_info, const PID_t** roll_info, const PID_t** yaw_info);
@@ -79,11 +84,19 @@ void get_pid_output_pointer(const Pid_Output_t** pid_output_data);
 bool pid_update_gains(void);
 
 /*
+ * Requires: USB port is available
+ * Modifies: PID loop gain variables, Virtual COM TX buffer, uart_data_ready
+ * Effects: Prompts user for all nine gains at once and blocks until a valid set is confirmed, or user types 'keep'
+ *          to leave gains unchanged. Only updates gains in RAM; they are stored when the next log is created
+ */
+void pid_user_update_all_gains(void);
+
+/*
  * Requires: USB port is availale
  * Modifies: Virtual COM TX buffer
  * Effects: prints gain update message format over serial
  */
-void pid_update_gains_prompt(void);
+void pid_print_update_single_gain_prompt(void);
 /*
 Requires: pilot commands are in TAER channel sequence. pilot command values are all percent-style integers from 0-1000 
 MUST VERIFY THAT QUAD IS ARMED BEFORE CALLING THIS FUNCTION. 

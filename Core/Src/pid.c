@@ -17,7 +17,12 @@
 #include <usbd_cdc_if.h>
 #include <stddef.h>
 #include "USB_Handler.h"
+#include "SPIFlash_Conductor.h"
+#include <ctype.h>
+#include <stdio.h>
 
+//kp, ki, kd for each of pitch, roll, yaw
+#define NUM_PID_GAINS 9
 
 static PID_t pid_roll_info;
 static PID_t pid_pitch_info;
@@ -73,12 +78,22 @@ static void check_max(int16_t* signed_commands);
 
 //USB update gain static functions
 static bool check_new_gain_range(const float* new_gain);
+static void print_gain_out_of_range_msg(void);
+/*
+Requires: Nothing
+Modifies: Nothing
+Effects: Returns true if metadata has the current packet version and all nine stored gains are within allowed range
+*/
+static bool metadata_gains_valid(const FlightLogger_Metadata_t* metadata);
+
 static const char* get_axis_name(const char* target_specifier);
 static const char* get_gain_name(const char* target_specifier);
 static size_t get_pid_gain_offset(const char* target_specifier);
 static PID_t* get_pid_target(const char* target_specifier);
 static bool get_gain_ptr(const char* target_specifier, float** gain_ptr);
 static void print_invalid_pid_command_msg(void);
+//label is printed in front of "PID gains:", e.g. "Current" or "New"
+static void print_pid_gains(const char* label);
 static void print_invalid_pid_axis_specifier_msg(void);
 static void print_invalid_gain_specifier_msg();
 
@@ -101,6 +116,41 @@ void pid_init(void) {
     pid_yaw_info.kp = PID_YAW_KP;
     pid_yaw_info.ki = PID_YAW_KI;
     pid_yaw_info.kd = PID_YAW_KD;
+
+    //gains are stored in metadata of every log, so most recent log holds most recent gains.
+    //if no logs exist or stored values are bad, keep defaults from above
+    FlightLogger_Metadata_t metadata;
+    if (flash_get_newest_metadata(&metadata) && metadata_gains_valid(&metadata)) {
+        pid_pitch_info.kp = metadata.pitch_proportional_gain;
+        pid_pitch_info.ki = metadata.pitch_integrator_gain;
+        pid_pitch_info.kd = metadata.pitch_derivative_gain;
+
+        pid_roll_info.kp = metadata.roll_proportional_gain;
+        pid_roll_info.ki = metadata.roll_integrator_gain;
+        pid_roll_info.kd = metadata.roll_derivative_gain;
+
+        pid_yaw_info.kp = metadata.yaw_proportional_gain;
+        pid_yaw_info.ki = metadata.yaw_integrator_gain;
+        pid_yaw_info.kd = metadata.yaw_derivative_gain;
+    }
+}
+
+static bool metadata_gains_valid(const FlightLogger_Metadata_t* metadata) {
+    //layout of gains could differ in another packet version
+    if (metadata->packet_version != PACKET_VERSION) {
+        return false;
+    }
+    const float gains[NUM_PID_GAINS] = {
+        metadata->pitch_proportional_gain, metadata->pitch_integrator_gain, metadata->pitch_derivative_gain,
+        metadata->roll_proportional_gain, metadata->roll_integrator_gain, metadata->roll_derivative_gain,
+        metadata->yaw_proportional_gain, metadata->yaw_integrator_gain, metadata->yaw_derivative_gain};
+
+    for (int i = 0; i < NUM_PID_GAINS; i++) {
+        if (!check_new_gain_range(&gains[i])) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void get_pid_info_pointers(const PID_t** pitch_axis, const  PID_t** roll_axis, const PID_t** yaw_axis) {
@@ -154,7 +204,7 @@ bool pid_update_gains(void) {
     // string should only ever be 3 characters long, plus one null terminator character
     char target_specifier[4];
 
-    pid_update_gains_prompt();
+    pid_print_update_single_gain_prompt();
     
     //wait for user input
     wait_for_user_input(10);
@@ -175,7 +225,10 @@ bool pid_update_gains(void) {
     }
     
     //protect against accidental dangerous gain values. Ignore if user tries to input invalid gain
-    check_new_gain_range(&new_gain);
+    if (!check_new_gain_range(&new_gain)) {
+        print_gain_out_of_range_msg();
+        return false;
+    }
 
     //write new gain value to pid_info object
     float* gain_ptr = NULL; 
@@ -190,13 +243,90 @@ bool pid_update_gains(void) {
     char action_string[355];
     snprintf(action_string, sizeof(action_string), "update pid %s %s to %.3f", axis_target_name, pid_target_name, new_gain);
     if (confirm_user_action(action_string)) {
-        printf("Updated %s %s to: %.3f", axis_target_name, pid_target_name, new_gain);
+        printf("Updated %s %s to: %.3f\n", axis_target_name, pid_target_name, new_gain);
         *gain_ptr = new_gain;
+        print_pid_gains("New");
         return true;
     } else {
         return false;
     }
 }
+
+void pid_user_update_all_gains(void) {
+    //same order as gains are stored in flight log metadata
+    float* const gain_ptrs[NUM_PID_GAINS] = {&pid_pitch_info.kp, &pid_pitch_info.ki, &pid_pitch_info.kd,
+                                             &pid_roll_info.kp, &pid_roll_info.ki, &pid_roll_info.kd,
+                                             &pid_yaw_info.kp, &pid_yaw_info.ki, &pid_yaw_info.kd};
+
+    while (1) {
+        printf("\nStored PID gains were erased. Enter all nine gains on one line, separated by spaces:\n"
+                "pitch_p pitch_i pitch_d roll_p roll_i roll_d yaw_p yaw_i yaw_d\n"
+                "Or type 'keep' to keep the current gains:\n"
+                "%.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f %.3f\n",
+                *gain_ptrs[0], *gain_ptrs[1], *gain_ptrs[2], *gain_ptrs[3], *gain_ptrs[4], *gain_ptrs[5],
+                *gain_ptrs[6], *gain_ptrs[7], *gain_ptrs[8]);
+
+        wait_for_user_input(10);
+        uart_data_ready = false;
+
+        uint8_t uart_buffer[APP_RX_DATA_SIZE];
+        uint32_t len = uart_receive_len;
+        memcpy(uart_buffer, UserRxBufferFS, sizeof(UserRxBufferFS));
+        //need null terminator to prevent sscanf from reading forever without stopping
+        if (!add_null_terminator(uart_buffer, &len)) {
+            print_invalid_pid_command_msg();
+            continue;
+        }
+
+        char keyword[5] = {0};
+        char extra_input[2];
+        if (sscanf((char*)uart_buffer, "%4s %1s", keyword, extra_input) == 1) {
+            for (int i = 0; keyword[i] != '\0'; i++) {
+                keyword[i] = tolower((unsigned char)keyword[i]);
+            }
+            if (strcmp(keyword, "keep") == 0) {
+                printf("Keeping current gains\n");
+                return;
+            }
+        }
+
+        float new_gains[NUM_PID_GAINS];
+        //extra_input only gets filled if user typed more than nine values, which is invalid
+        int num_read = sscanf((char*)uart_buffer, "%15f %15f %15f %15f %15f %15f %15f %15f %15f %1s",
+                                &new_gains[0], &new_gains[1], &new_gains[2], &new_gains[3], &new_gains[4],
+                                &new_gains[5], &new_gains[6], &new_gains[7], &new_gains[8], extra_input);
+        if (num_read != NUM_PID_GAINS) {
+            print_invalid_pid_command_msg();
+            continue;
+        }
+
+        bool gains_in_range = true;
+        for (int i = 0; i < NUM_PID_GAINS; i++) {
+            if (!check_new_gain_range(&new_gains[i])) {
+                gains_in_range = false;
+            }
+        }
+        if (!gains_in_range) {
+            print_gain_out_of_range_msg();
+            continue;
+        }
+
+        char action_string[200];
+        snprintf(action_string, sizeof(action_string),
+                    "set gains to pitch: %.3f %.3f %.3f, roll: %.3f %.3f %.3f, yaw: %.3f %.3f %.3f",
+                    new_gains[0], new_gains[1], new_gains[2], new_gains[3], new_gains[4], new_gains[5],
+                    new_gains[6], new_gains[7], new_gains[8]);
+        if (confirm_user_action(action_string)) {
+            for (int i = 0; i < NUM_PID_GAINS; i++) {
+                *gain_ptrs[i] = new_gains[i];
+            }
+            printf("Updated all PID gains\n");
+            print_pid_gains("New");
+            return;
+        }
+    }
+}
+
 //uses pointer to pointer to update gain_ptr
 static bool get_gain_ptr(const char* target_specifier, float** gain_ptr) {
     PID_t* pid_axis_info_ptr = get_pid_target(target_specifier);
@@ -216,7 +346,19 @@ static bool get_gain_ptr(const char* target_specifier, float** gain_ptr) {
     return true;
 }
 
-void pid_update_gains_prompt(void) {
+static void print_pid_gains(const char* label) {
+    printf("\n%s PID gains:\n"
+            "pitch: p = %.3f, i = %.3f, d = %.3f\n"
+            "roll:  p = %.3f, i = %.3f, d = %.3f\n"
+            "yaw:   p = %.3f, i = %.3f, d = %.3f\n\n",
+            label,
+            pid_pitch_info.kp, pid_pitch_info.ki, pid_pitch_info.kd,
+            pid_roll_info.kp, pid_roll_info.ki, pid_roll_info.kd,
+            pid_yaw_info.kp, pid_yaw_info.ki, pid_yaw_info.kd);
+}
+
+void pid_print_update_single_gain_prompt(void) {
+    print_pid_gains("Current");
     printf("Serial PID gain update options: (replace x with desired gain value)\n"
             "p_p x (pitch proportional)\n"
             "p_i x (pitch integrator gain)\n"
@@ -397,15 +539,13 @@ static void check_max(int16_t* signed_commands) {
 /**********************************************************************************************
                         USB Serial Gain update helper functions
 ***********************************************************************************************/
+//comparisons are false for NaN, so NaN is rejected too
 static bool check_new_gain_range(const float* new_gain) {
-        if (*new_gain < 0) {
-        CDC_Transmit_FS((uint8_t*)"Gain must be positive. Please try again.\n", 40);
-        return false;
-    } else if (*new_gain > 20) {
-        CDC_Transmit_FS((uint8_t*)"Gain must be less than 20. Please try again.\n", 44);
-        return false;
-    }
-    return true;
+    return *new_gain >= PID_GAIN_MIN && *new_gain <= PID_GAIN_MAX;
+}
+
+static void print_gain_out_of_range_msg(void) {
+    printf("Gain must be between %d and %d. Please try again.\n", PID_GAIN_MIN, PID_GAIN_MAX);
 }
 
 
