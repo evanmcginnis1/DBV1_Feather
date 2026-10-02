@@ -23,6 +23,7 @@ typedef enum {
     DOWNLOAD_LOGS,
     UPDATE_PID_GAINS,
     UNLOCK,
+    ERASE,
     INVALID_COMMAND,
 } User_USB_Commands_t;
 
@@ -31,6 +32,12 @@ typedef enum {
     CANCEL,
     INVALID_INPUT,
 } User_Confirmation_Result_t;
+
+typedef enum {
+    ERASE_ENTIRE_CHIP = 1,
+    ERASE_LOG = 0,
+    ERASE_CANCEL = 2,
+} User_Erase_Type_t;
 /*
  * Requires: uart_buffer is a uint8_t type array
  * Modifies: nothing
@@ -47,6 +54,8 @@ bool confirm_user_action(const char* user_action_string);
 
 void download_logs(void);
 
+//prompts user if they want to erase a specific log or if they want to erase the entire chip
+void user_flash_erase(void);
 
 void wait_for_user_input(uint32_t delay_ms_between_checks);
 /*

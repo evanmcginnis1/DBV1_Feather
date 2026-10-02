@@ -12,7 +12,6 @@
 #include <string.h>
 #include "usbd_cdc_if.h"
 #include "SPIFlash_Conductor.h"
-#include "Helper_Functions.h"
 #include <inttypes.h>
 
 //static functions
@@ -66,7 +65,7 @@ static void print_flightlog_metadata_header(void);
  * Effects: Prompts user to select the log that they want and returns chosen log number. If user chooses invalid log,
             return INVALID_LOG_CHOICE
  */
-static uint32_t select_log_to_download(void);
+static uint32_t user_select_log(void);
 
 /**************************************************** */
 
@@ -192,6 +191,8 @@ User_USB_Commands_t get_usb_command(void) {
         user_command = DOWNLOAD_LOGS;
     } else if (strcmp((char*)uart_buffer, "unlock") == 0) {
         user_command = UNLOCK;
+    } else if (strcmp((char*)uart_buffer, "erase") == 0) {
+        user_command = ERASE;
     } else {
         return INVALID_COMMAND;
     }
@@ -217,7 +218,9 @@ static char* usb_mode_to_string(const User_USB_Commands_t* user_command) {
     if (*user_command == UPDATE_PID_GAINS) {
         return "update pid gains";
     } else if (*user_command == DOWNLOAD_LOGS) {
-        return "Download flight logs";
+        return "download flight logs";
+    } else if (*user_command == ERASE) {
+        return "enter erase mode";
     } else if (*user_command == UNLOCK){
         return "unlock disarm state (quad can re-arm in ten seconds if arm switch flipped down)";
     } else {
@@ -283,6 +286,7 @@ static void prompt_for_usb_commands(void) {
             "Flight Controller USB Commands:\n"
             "'update_pid': Allows user to update PID gain values\n"
             "'download_logs': Streams flight log data over serial to computer\n"
+            "'erase': Erase either entire chip or a specific log\n"
             "'unlock': unlocks quad from hard disarm state. DANGER: AFTER TEN SECONDS, QUAD CAN POTENTIALLY BE"
             "RE-ARMED. BE PREPARED TO MOVE AWAY QUICKLY\n\n");
 }
@@ -327,11 +331,9 @@ static void normalize_input(uint8_t* input, const uint32_t* Len) {
     }
 }
 
-static uint32_t select_log_to_download(void) {
-    const uint32_t* chunk_map_list = flash_get_chunk_map_list();
+static uint32_t user_select_log(void) {
     uint8_t input_buffer[APP_RX_DATA_SIZE];
-    printf("Which log would you like to download?\n");
-    wait_for_user_input(10);\
+    wait_for_user_input(10);
     uart_data_ready = false;
     //use memcpy to prevent volatile UserRxBuffer changing while using it
     uint32_t len = uart_receive_len;
@@ -340,16 +342,24 @@ static uint32_t select_log_to_download(void) {
     // cast from unsigned char to char
     int user_choice = atoi((char*)input_buffer);
     
-    int max_log_number = max_in_list(chunk_map_list, FLASH_NUM_CHUNKS);
-    int min_log_number = min_in_list(chunk_map_list, FLASH_NUM_CHUNKS);
+    int max_log_number = get_max_log_number();
+    int min_log_number = get_min_log_number();
 
-    if (user_choice > max_log_number || user_choice < min_log_number || user_choice == UINT32_MAX) {
+    while (user_choice > max_log_number || user_choice < min_log_number || user_choice == UINT32_MAX) {
         //replace with named constant
-        return INVALID_LOG_CHOICE;
-    } else {
-        return user_choice;
-    }
+        printf("Invalid log selection. Choice must be between %i and %i\n", min_log_number, max_log_number);
+        printf("Which log would you like to download?\n");
 
+        wait_for_user_input(10);
+        uart_data_ready = false;
+        //use memcpy to prevent volatile UserRxBuffer changing while using it
+        len = uart_receive_len;
+        memcpy(input_buffer, UserRxBufferFS, uart_receive_len);
+        add_null_terminator(input_buffer, &len);
+        // cast from unsigned char to char
+        user_choice = atoi((char*)input_buffer);
+    } 
+    return user_choice;
 }
 
 /*
@@ -375,21 +385,87 @@ static void transmit_logs(uint32_t log_number) {
         print_flightlog_datapoint(&datapoint);
     }
 }
+static User_Erase_Type_t user_select_erase_mode(void) {
+    uint8_t input_buffer[APP_RX_DATA_SIZE];
+    printf("Do you want to erase the entire chip? Type 'y' or 'n'\n");
+    wait_for_user_input(10);
+    uart_data_ready = false;
+    //use memcpy to prevent volatile UserRxBuffer changing while using it
+    uint32_t len = uart_receive_len;
+    memcpy(input_buffer, UserRxBufferFS, len);
+    normalize_input(input_buffer, &len);
+    add_null_terminator(input_buffer, &len);
+    if (input_buffer[0] == 'y') {
+        return ERASE_ENTIRE_CHIP;
+    } else if (input_buffer[0] == 'n') {
+        return ERASE_LOG;
+    }
+    return ERASE_CANCEL;
 
+}
+
+/*
+ * Requires: flash chip not WIP
+ * Modifies: flash chip, chunk map
+ * Effects: Opens a new log so that there is always a log with metadata for the next flight to write to
+ */
+static void reopen_log(void) {
+    const PID_t* pid_pitch;
+    const PID_t* pid_roll;
+    const PID_t* pid_yaw;
+    get_pid_info_pointers(&pid_pitch, &pid_roll, &pid_yaw);
+    //also updates memory map
+    flash_new_log(pid_pitch, pid_roll, pid_yaw);
+}
+
+void user_flash_erase(void) {
+    flash_print_memory_map();
+    User_Erase_Type_t erase_mode = user_select_erase_mode();
+    if (erase_mode == ERASE_ENTIRE_CHIP) {
+        if (confirm_user_action("erase the entire flash chip (this resets the log counter)")) {
+            printf("Erasing chip...\n");
+            flash_erase_chip();
+            //currently open log was erased, so start a new one
+            reopen_log();
+            printf("Chip erase complete. New memory map:\n");
+            flash_print_memory_map();
+        } else {
+            return;
+        }
+
+    } else if (erase_mode == ERASE_LOG) {
+        printf("Which log would you like to erase? Type log number\n");
+        uint32_t log_number = user_select_log();
+        //highest log number is always the currently open log
+        bool is_open_log = (log_number == get_max_log_number());
+
+        printf("You selected log %" PRIu32".\n", log_number);
+        if (confirm_user_action("erase this log")) {
+            if (!flash_erase_log(log_number)) {
+                printf("Log %" PRIu32 " not found. Nothing erased.\n", log_number);
+                return;
+            }
+            flash_update_memory_map();
+            if (is_open_log) {
+                reopen_log();
+            }
+            printf("Log %" PRIu32 " erase complete. New memory map: \n", log_number);
+            flash_print_memory_map();
+        } else {
+            return;
+        }
+    } else {
+        printf("Invalid erase mode selection --> Cancelling request\n");
+    }
+
+}
 
 void download_logs(void) {
-    const uint32_t* chunk_map_list = flash_get_chunk_map_list();
     printf("Input log number of log that you would like to download. Highest log number corresponds to most recent data. \n");
     flash_print_memory_map();
-    
-    uint32_t user_choice = select_log_to_download();
+    printf("Which log would you like to download?\n");
+    uint32_t user_choice = user_select_log();
     //wait for valid input
-    while (user_choice == INVALID_LOG_CHOICE) {
-        uint32_t min = min_in_list(chunk_map_list, FLASH_NUM_CHUNKS);
-        uint32_t max = max_in_list(chunk_map_list, FLASH_NUM_CHUNKS);
-        printf("Invalid log selection. Choice must be between %" PRIu32 " and %" PRIu32 "\n", min, max);
-        user_choice = select_log_to_download();
-    }
 
     transmit_logs(user_choice);
 }
