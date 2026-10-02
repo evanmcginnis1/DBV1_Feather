@@ -154,11 +154,34 @@ int main(void)
   //initializes pid_info objects
   pid_init();
   //get pointers to static pid_info objects
-  PID_t* pid_pitch;
-  PID_t* pid_roll;
-  PID_t* pid_yaw;
-  get_pid_info(pid_pitch, pid_roll, pid_yaw);
-  flash_init(pid_pitch, pid_roll, pid_yaw);
+  const PID_t* pid_pitch;
+  const PID_t* pid_roll;
+  const PID_t* pid_yaw;
+  get_pid_info_pointers(&pid_pitch, &pid_roll, &pid_yaw);
+  const Pid_Output_t* pid_outputs;
+  get_pid_output_pointer(&pid_outputs);
+  flash_init(pid_outputs);
+
+  //create a new log on power up always
+  flash_new_log(pid_pitch, pid_roll, pid_yaw);
+  flash_print_memory_map();
+
+  IMU_Model_t imu_dummy = {
+    .pitch_abs = 1.2,
+    .roll_abs = 1.3,
+    .yaw_abs = 1.4, 
+    .pitch_rate = 1.5,
+    .yaw_rate = 1.6,
+    .roll_rate = 1.7,
+  };
+
+  float setpoint_dummy[4] = {2, 3, 4, 5};
+  uint16_t normalized_commands_dummy[4] = {1000, 500, 600, 700};
+  for (int i = 0; i < 5; i++) {
+    flash_add_entry(&state, &imu_dummy, setpoint_dummy, normalized_commands_dummy);
+  }
+
+  
   //need to start timer explicitly to run interrupt-based main loop 
   HAL_TIM_Base_Start_IT(MAIN_LOOP_TIM);
 
@@ -181,6 +204,8 @@ int main(void)
               HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
               pid_update(&imu_model, ibus_data_pcts, esc_commands_pcts, setpoint_output);
               dshot_write_from_percents(esc_commands_pcts);
+              //setpoint_output
+              flash_add_entry(&state, &imu_model, setpoint_output, esc_commands_pcts);
             }
           break;
 
@@ -229,6 +254,8 @@ int main(void)
           //only requires flipping ARM switch to re-arm
         default: 
           dshot_disarm();
+          //create new log on disarm; functions to end previous log, and ensures that new log is setup
+          flash_new_log(pid_pitch, pid_roll, pid_yaw);
           HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
           break;
       }
