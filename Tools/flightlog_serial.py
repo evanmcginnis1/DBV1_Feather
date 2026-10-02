@@ -7,13 +7,16 @@ Host-side serial console for the DBV1 flight controller.
 - Acts as a plain line-based serial terminal: whatever you type is sent as ONE packet when you
   press Enter (no newline is sent, since the firmware treats each USB packet as a full message).
 - When the flight controller streams a log (download_logs), the log is saved to
-  ~/Documents/Drone_Build/DBV1_Feather/FlightLogs/FLIGHTLOG<log_number>.csv
+  <repository root>/FlightLogs/FLIGHTLOG<log_number>.csv
 
 Usage:
     python3 Tools/flightlog_serial.py [port]
 
 Requires pyserial:
     python3 -m pip install --user pyserial
+
+NOTE: this file was generated entirely by Claude Code; it is not key to the functionality of the flight controller, but 
+      rather was created to be a quick tool for simplifying the serial interface. 
 """
 
 import csv
@@ -28,7 +31,9 @@ try:
 except ImportError:
     serial = None
 
-OUTPUT_DIR = Path.home() / "Documents" / "Drone_Build" / "DBV1_Feather" / "FlightLogs"
+# Resolved from this file's location (<repo>/Tools/), so it works wherever the repository is cloned
+REPO_ROOT = Path(__file__).resolve().parent.parent
+OUTPUT_DIR = REPO_ROOT / "FlightLogs"
 
 # Must match the printf strings in Core/Src/USB_Handler.c
 METADATA_HEADER_PREFIX = "Log Counter,"
