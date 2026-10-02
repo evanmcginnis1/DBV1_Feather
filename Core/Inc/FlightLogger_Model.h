@@ -20,33 +20,36 @@
    Quadcopter_State_t current_state;
    //convert to timestamp
    uint16_t entry_counter;
+   //time between entries - placeholder for planned variable pid dt based on IMU ready interrupt
+   uint16_t loop_dt_us;
+
+   uint16_t batt_voltage_mV;
 
    //data that pid loop is based on
    float pitch_angle;
    float roll_angle;
-
 
    //raw gyro data
    float pitch_rate;
    float roll_rate;
    float yaw_rate;
 
-   //missing roll rate 
+ //pilot command input after being converted into real units
+   float pilot_pitch_command_angle;
+   float pilot_roll_command_angle;
+   float pilot_yaw_command_rate;
+   float pilot_throttle_command;
+//
+   int16_t pid_pitch_out_pct;
+   int16_t pid_roll_out_pct;
+   int16_t pid_yaw_out_pct;
 
-   float pitch_command_angle;
-   float roll_command_angle;
+   //int16_t m4_output_raw;
 
-   float yaw_command_rate;
-   float throttle_command;
-
-   uint16_t m1_output_raw;
-   uint16_t m1_output_normalized;
-   uint16_t m2_output_raw;
-   uint16_t m2_output_normalized;
-   uint16_t m3_output_raw;
-   uint16_t m3_output_normalized;
-   uint16_t m4_output_raw;
-   uint16_t m4_output_normalized;
+   uint16_t m1_output_synthesized;
+   uint16_t m2_output_synthesized;
+   uint16_t m3_output_synthesized;
+   uint16_t m4_output_synthesized;
 
 
    uint16_t crc;
@@ -71,4 +74,5 @@
     uint16_t crc;
 
  } FlightLogger_Metadata_t;
+
 #endif
