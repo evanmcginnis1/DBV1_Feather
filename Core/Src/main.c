@@ -19,6 +19,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "State.h"
 #include "dma.h"
 #include "i2c.h"
 #include "spi.h"
@@ -39,6 +40,7 @@
 #include "FlightLogger_Model.h"
 #include "SPIFlash_Conductor.h"
 #include <math.h>
+#include <inttypes.h>
 #include <usbd_cdc_if.h>
 
 /* USER CODE END Includes */
@@ -107,12 +109,12 @@ int main(void)
 
   /* USER CODE BEGIN 1 */
   IMU_Model_t imu_model;
-  //write all ones to ibus_data array so that 
   uint16_t ibus_data_pcts[IBUS_NUM_CHANNELS];
   uint16_t esc_commands_pcts[4] = {0};
-  Quadcopter_State_t state = HARD_DISARM;
-  bool disarm_locked = true;
+  Quadcopter_State_t state = SOFT_DISARM;
+  bool disarm_locked = false;
   User_USB_Commands_t user_command;
+  static Quadcopter_State_t prev_state = SOFT_DISARM;
   float setpoint_output[NUM_MOTORS] = {0};
   /* USER CODE END 1 */
 
@@ -143,45 +145,30 @@ int main(void)
   MX_TIM2_Init();
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
+  set_loop_rate(PID_LOOP_RATE_HZ);
 
-
-  set_loop_rate(100);
-  /*
   dshot_init(DSHOT300);
   ibus_init(IBUS_UART);
   IMU_init(&hi2c1);
-  */
+  //flash must be initialized before pid, since pid gains are loaded from most recent flight log
+  const Pid_Output_t* pid_outputs;
+
+  get_pid_output_pointer(&pid_outputs);
+  flash_init(pid_outputs);
+
   //initializes pid_info objects
   pid_init();
+
   //get pointers to static pid_info objects
   const PID_t* pid_pitch;
   const PID_t* pid_roll;
   const PID_t* pid_yaw;
+
   get_pid_info_pointers(&pid_pitch, &pid_roll, &pid_yaw);
-  const Pid_Output_t* pid_outputs;
-  get_pid_output_pointer(&pid_outputs);
-  flash_init(pid_outputs);
 
   //create a new log on power up always
   flash_new_log(pid_pitch, pid_roll, pid_yaw);
-  flash_print_memory_map();
 
-  IMU_Model_t imu_dummy = {
-    .pitch_abs = 1.2,
-    .roll_abs = 1.3,
-    .yaw_abs = 1.4, 
-    .pitch_rate = 1.5,
-    .yaw_rate = 1.6,
-    .roll_rate = 1.7,
-  };
-
-  float setpoint_dummy[4] = {2, 3, 4, 5};
-  uint16_t normalized_commands_dummy[4] = {1000, 500, 600, 700};
-  for (int i = 0; i < 5; i++) {
-    flash_add_entry(&state, &imu_dummy, setpoint_dummy, normalized_commands_dummy);
-  }
-
-  
   //need to start timer explicitly to run interrupt-based main loop 
   HAL_TIM_Base_Start_IT(MAIN_LOOP_TIM);
 
@@ -193,10 +180,10 @@ int main(void)
   {
     if (loop_ready_flag) {
       loop_ready_flag = 0;
-      //IMU_update_model(&imu_model);
-      //ibus_read_as_percents(ibus_data);
+      IMU_update_model(&imu_model);
+      ibus_read_as_percents(ibus_data_pcts);
 
-      //update_state(ibus_data, &imu_model, &disarm_locked, &state);
+      update_state(ibus_data_pcts, &imu_model, &disarm_locked, &state);
 
       switch(state) {
         case ARMED: 
@@ -204,7 +191,6 @@ int main(void)
               HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_RESET);
               pid_update(&imu_model, ibus_data_pcts, esc_commands_pcts, setpoint_output);
               dshot_write_from_percents(esc_commands_pcts);
-              //setpoint_output
               flash_add_entry(&state, &imu_model, setpoint_output, esc_commands_pcts);
             }
           break;
@@ -217,8 +203,8 @@ int main(void)
 
           user_command = INVALID_COMMAND;
           while (disarm_locked) {
-            //dshot_disarm();
-            //HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
+            dshot_disarm();
+            HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
             user_command = get_usb_command();
             uart_data_ready = false;
 
@@ -229,6 +215,9 @@ int main(void)
                 break;
               case UPDATE_PID_GAINS:
                 pid_update_gains();
+                break;
+              case ERASE:
+                user_flash_erase();
                 break;
               case UNLOCK:
                 unlock_state(&disarm_locked);
@@ -255,10 +244,13 @@ int main(void)
         default: 
           dshot_disarm();
           //create new log on disarm; functions to end previous log, and ensures that new log is setup
-          flash_new_log(pid_pitch, pid_roll, pid_yaw);
+          if (prev_state == ARMED || prev_state == HARD_DISARM) {
+            flash_new_log(pid_pitch, pid_roll, pid_yaw);
+          }
           HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
           break;
       }
+      prev_state = state;
     }
   }
     /* USER CODE END WHILE */
