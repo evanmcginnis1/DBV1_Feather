@@ -20,6 +20,7 @@
 #include "SPIFlash_Conductor.h"
 #include <ctype.h>
 #include <stdio.h>
+#include <inttypes.h>
 
 //kp, ki, kd for each of pitch, roll, yaw
 #define NUM_PID_GAINS 9
@@ -28,6 +29,8 @@ static PID_t pid_roll_info;
 static PID_t pid_pitch_info;
 static PID_t pid_yaw_info;
 static Pid_Output_t pid_axis_out_pct;
+static uint16_t pid_output_idle;
+static uint16_t pid_output_max;
 
 static int8_t axis_synth_coeffs[NUM_MOTORS][3] = {{+1, +1, -1},
                                                   {+1, -1, +1}, 
@@ -85,6 +88,20 @@ Modifies: Nothing
 Effects: Returns true if metadata has the current packet version and all nine stored gains are within allowed range
 */
 static bool metadata_gains_valid(const FlightLogger_Metadata_t* metadata);
+/*
+Requires: Nothing
+Modifies: Nothing
+Effects: Returns true if idle and max are both within their allowed ranges and idle is less than max
+*/
+static bool check_output_limits(uint16_t idle, uint16_t max);
+/*
+Requires: target_specifier is either "idle" or "max"
+Modifies: pid_output_idle or pid_output_max, Virtual COM TX buffer, uart_data_ready
+Effects: Asks user to confirm, then updates the chosen motor output limit. Returns false and changes nothing if
+         new_value is invalid or user cancels
+*/
+static bool update_output_limit(const char* target_specifier, const float* new_value);
+static void print_output_limit_out_of_range_msg(void);
 
 static const char* get_axis_name(const char* target_specifier);
 static const char* get_gain_name(const char* target_specifier);
@@ -117,10 +134,24 @@ void pid_init(void) {
     pid_yaw_info.ki = PID_YAW_KI;
     pid_yaw_info.kd = PID_YAW_KD;
 
+    pid_output_idle = PID_OUTPUT_IDLE;
+    pid_output_max = PID_OUTPUT_MAX;
+
     //gains are stored in metadata of every log, so most recent log holds most recent gains.
     //if no logs exist or stored values are bad, keep defaults from above
     FlightLogger_Metadata_t metadata;
-    if (flash_get_newest_metadata(&metadata) && metadata_gains_valid(&metadata)) {
+    if (!flash_get_newest_metadata(&metadata)) {
+        return;
+    }
+
+    //checked separately from gains, so that bad idle/max values don't stop stored gains from being loaded
+    if (metadata.packet_version == PACKET_VERSION &&
+        check_output_limits(metadata.motor_output_idle, metadata.motor_output_max)) {
+        pid_output_idle = metadata.motor_output_idle;
+        pid_output_max = metadata.motor_output_max;
+    }
+
+    if (metadata_gains_valid(&metadata)) {
         pid_pitch_info.kp = metadata.pitch_proportional_gain;
         pid_pitch_info.ki = metadata.pitch_integrator_gain;
         pid_pitch_info.kd = metadata.pitch_derivative_gain;
@@ -163,6 +194,11 @@ void get_pid_output_pointer(const Pid_Output_t** pid_output_data) {
     *pid_output_data = &pid_axis_out_pct;
 }
 
+void pid_get_output_limits(uint16_t* idle, uint16_t* max) {
+    *idle = pid_output_idle;
+    *max = pid_output_max;
+}
+
 /* article on quadcopter flight dynamics
 https://timhanewich.medium.com/how-i-developed-the-scout-flight-controller-part-1-quadcopter-flight-dynamics-400af73d21db
 */
@@ -197,12 +233,15 @@ r_d x
 y_p x (yaw)
 y_i x
 y_d x
+
+idle x (motor output idle)
+max x (motor output max)
 */
 bool pid_update_gains(void) {
     uint8_t read_success = 0;
     float new_gain = 0.0f;
-    // string should only ever be 3 characters long, plus one null terminator character
-    char target_specifier[4];
+    // string should only ever be 4 characters long at most, plus one null terminator character
+    char target_specifier[5];
 
     pid_print_update_single_gain_prompt();
     
@@ -217,13 +256,24 @@ bool pid_update_gains(void) {
     add_null_terminator(uart_buffer, &len);
 
     //limit to 15 characters in float to prevent buffer overflow, but don't ever expect a float that long
-    read_success = sscanf((char*)uart_buffer, "%3s %15f", target_specifier, &new_gain);
+    read_success = sscanf((char*)uart_buffer, "%4s %15f", target_specifier, &new_gain);
 
     if (read_success != 2) {
         print_invalid_pid_command_msg();
         return false;
     }
-    
+
+    //motor output limits are not pid gains, so they have their own range checks
+    if (strcmp(target_specifier, "idle") == 0 || strcmp(target_specifier, "max") == 0) {
+        return update_output_limit(target_specifier, &new_gain);
+    }
+
+    //gain specifiers are always exactly 3 characters
+    if (strlen(target_specifier) != 3) {
+        print_invalid_pid_command_msg();
+        return false;
+    }
+
     //protect against accidental dangerous gain values. Ignore if user tries to input invalid gain
     if (!check_new_gain_range(&new_gain)) {
         print_gain_out_of_range_msg();
@@ -245,6 +295,39 @@ bool pid_update_gains(void) {
     if (confirm_user_action(action_string)) {
         printf("Updated %s %s to: %.3f\n", axis_target_name, pid_target_name, new_gain);
         *gain_ptr = new_gain;
+        print_pid_gains("New");
+        return true;
+    } else {
+        return false;
+    }
+}
+
+static bool update_output_limit(const char* target_specifier, const float* new_value) {
+    bool is_idle = (strcmp(target_specifier, "idle") == 0);
+
+    //must be a whole number on the 0-1000 percent scale. range comparison is false for NaN, so NaN is rejected too
+    if (!(*new_value >= 0 && *new_value <= PID_OUTPUT_MAX_LIMIT) || *new_value != (float)(uint16_t)*new_value) {
+        print_output_limit_out_of_range_msg();
+        return false;
+    }
+
+    //check new value together with the limit that is not being changed, so idle can never end up above max
+    uint16_t new_idle = is_idle ? (uint16_t)*new_value : pid_output_idle;
+    uint16_t new_max = is_idle ? pid_output_max : (uint16_t)*new_value;
+    if (!check_output_limits(new_idle, new_max)) {
+        print_output_limit_out_of_range_msg();
+        return false;
+    }
+
+    const char* limit_name = is_idle ? "idle" : "max";
+    uint16_t new_limit = is_idle ? new_idle : new_max;
+
+    char action_string[64];
+    snprintf(action_string, sizeof(action_string), "update motor output %s to %u", limit_name, new_limit);
+    if (confirm_user_action(action_string)) {
+        pid_output_idle = new_idle;
+        pid_output_max = new_max;
+        printf("Updated motor output %s to: %u\n", limit_name, new_limit);
         print_pid_gains("New");
         return true;
     } else {
@@ -350,11 +433,13 @@ static void print_pid_gains(const char* label) {
     printf("\n%s PID gains:\n"
             "pitch: p = %.3f, i = %.3f, d = %.3f\n"
             "roll:  p = %.3f, i = %.3f, d = %.3f\n"
-            "yaw:   p = %.3f, i = %.3f, d = %.3f\n\n",
+            "yaw:   p = %.3f, i = %.3f, d = %.3f\n"
+            "motor output: idle = %u, max = %u\n\n",
             label,
             pid_pitch_info.kp, pid_pitch_info.ki, pid_pitch_info.kd,
             pid_roll_info.kp, pid_roll_info.ki, pid_roll_info.kd,
-            pid_yaw_info.kp, pid_yaw_info.ki, pid_yaw_info.kd);
+            pid_yaw_info.kp, pid_yaw_info.ki, pid_yaw_info.kd,
+            pid_output_idle, pid_output_max);
 }
 
 void pid_print_update_single_gain_prompt(void) {
@@ -370,7 +455,11 @@ void pid_print_update_single_gain_prompt(void) {
             "\n"
             "y_p x (yaw)\n"
             "y_i x\n"
-            "y_d x\n");
+            "y_d x\n"
+            "\n"
+            "idle x (motor output idle, 0 to %d, must be less than max)\n"
+            "max x (motor output max, up to %d)\n",
+            PID_OUTPUT_IDLE_LIMIT, PID_OUTPUT_MAX_LIMIT);
 }
 
 //pilot_command[0] = roll
@@ -452,10 +541,10 @@ static void synthesize_pid_commands(const float* throttle_command_pct, uint16_t*
     check_idle(signed_commands);
 
     for (int motor = 0; motor < NUM_MOTORS; motor++) {
-        if (signed_commands[motor] < PID_OUTPUT_IDLE) {
-            signed_commands[motor] = PID_OUTPUT_IDLE;
-        } else if (signed_commands[motor] > PID_OUTPUT_MAX) {
-            signed_commands[motor] = PID_OUTPUT_MAX;
+        if (signed_commands[motor] < pid_output_idle) {
+            signed_commands[motor] = pid_output_idle;
+        } else if (signed_commands[motor] > pid_output_max) {
+            signed_commands[motor] = pid_output_max;
         }
     }
 
@@ -475,9 +564,9 @@ static void check_integrator(int16_t* signed_commands) {
     int8_t direction = 0;
     for (int motor = 0; motor < NUM_MOTORS; motor++) {
         direction = 0; 
-        if (signed_commands[motor] > PID_OUTPUT_MAX) {
+        if (signed_commands[motor] > pid_output_max) {
             direction = 1;
-        } else if (signed_commands[motor] < PID_OUTPUT_IDLE) {
+        } else if (signed_commands[motor] < pid_output_idle) {
             direction = -1;
         }
     
@@ -501,9 +590,9 @@ static void check_idle(int16_t* signed_commands) {
     int16_t shift_distance = 0;
     bool shift_needed = false;
     for (int i = 0; i < NUM_MOTORS; i++) {
-        if (signed_commands[i] < PID_OUTPUT_IDLE) {
+        if (signed_commands[i] < pid_output_idle) {
             shift_needed = true;
-            int16_t temp_shift_distance = PID_OUTPUT_IDLE - signed_commands[i];
+            int16_t temp_shift_distance = pid_output_idle - signed_commands[i];
             if (temp_shift_distance > shift_distance) {
                 shift_distance = temp_shift_distance;
             }
@@ -520,9 +609,9 @@ static void check_max(int16_t* signed_commands) {
     int16_t shift_distance = 0;
     bool shift_needed = false;
     for (int i = 0; i < NUM_MOTORS; i++) {
-        if (signed_commands[i] > PID_OUTPUT_MAX) {
+        if (signed_commands[i] > pid_output_max) {
             shift_needed = true;
-            int16_t temp_shift_distance = signed_commands[i] - PID_OUTPUT_MAX;
+            int16_t temp_shift_distance = signed_commands[i] - pid_output_max;
             if (temp_shift_distance > shift_distance) {
                 shift_distance = temp_shift_distance;
             }
@@ -546,6 +635,16 @@ static bool check_new_gain_range(const float* new_gain) {
 
 static void print_gain_out_of_range_msg(void) {
     printf("Gain must be between %d and %d. Please try again.\n", PID_GAIN_MIN, PID_GAIN_MAX);
+}
+
+static bool check_output_limits(uint16_t idle, uint16_t max) {
+    return idle <= PID_OUTPUT_IDLE_LIMIT && max <= PID_OUTPUT_MAX_LIMIT && idle < max;
+}
+
+static void print_output_limit_out_of_range_msg(void) {
+    printf("Motor output idle must be a whole number between 0 and %d, max must be a whole number no greater than %d, "
+            "and idle must be less than max (current idle = %u, max = %u). Please try again.\n",
+            PID_OUTPUT_IDLE_LIMIT, PID_OUTPUT_MAX_LIMIT, pid_output_idle, pid_output_max);
 }
 
 

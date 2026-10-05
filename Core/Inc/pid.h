@@ -31,8 +31,12 @@
 #define PID_GAIN_MAX 20
 
 //dshot throttle ranges from 48 to 2048; 2000 steps
+//defaults; used when no valid idle/max values are stored in flash
 #define PID_OUTPUT_MAX 500
 #define PID_OUTPUT_IDLE 150
+//allowed range for idle/max set over serial or loaded from flash (0-1000 percent scale). idle must also be less than max
+#define PID_OUTPUT_IDLE_LIMIT 500
+#define PID_OUTPUT_MAX_LIMIT 1000
 
 
 #define PID_MAX_YAW_RATE_INPUT 200
@@ -64,11 +68,12 @@ typedef struct {
 
 /* 
 Requires: Nothing
-Modifies: pid_x_info structs, where x is pitch, roll, yaw
+Modifies: pid_x_info structs, where x is pitch, roll, yaw. Motor output idle and max values
 Requires: flash_init has been called
 Effects: Initializes pid info structs for each axis. Gains are loaded from the metadata of the most recent flight log.
          If there are no logs (or the stored gains are invalid), uses defined gain constants instead. Sets accumulated
-         error and previous error terms to zero.
+         error and previous error terms to zero. Motor output idle and max are loaded from the same metadata,
+         independently of the gains; if they are missing or invalid, uses PID_OUTPUT_IDLE and PID_OUTPUT_MAX instead.
 */
 void pid_init(void);
 
@@ -77,9 +82,18 @@ void get_pid_info_pointers(const PID_t** pitch_info, const PID_t** roll_info, co
 void get_pid_output_pointer(const Pid_Output_t** pid_output_data);
 
 /*
- * Requires: uart_data has been populated with message from serial port containing new pid gain value
- * Modifies: PID loop gain variables
- * Effects: Updates PID. Returns true if update is confirmed, returns false if invalid input or user cancels
+ * Requires: pid_init has been called
+ * Modifies: idle, max
+ * Effects: Copies current motor output idle and max values (0-1000 percent scale) into idle and max
+ */
+void pid_get_output_limits(uint16_t* idle, uint16_t* max);
+
+/*
+ * Requires: uart_data has been populated with message from serial port containing new pid gain value, or new motor
+ *           output idle/max value
+ * Modifies: PID loop gain variables, motor output idle and max values
+ * Effects: Updates one PID gain, or motor output idle or max. Returns true if update is confirmed, returns false if
+ *          invalid input or user cancels. Only updates values in RAM; they are stored when the next log is created
  */
 bool pid_update_gains(void);
 

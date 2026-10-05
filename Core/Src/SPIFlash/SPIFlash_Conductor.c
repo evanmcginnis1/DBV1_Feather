@@ -236,9 +236,16 @@ static uint32_t chunk_idx_to_addr(uint8_t chunk_idx) {
 
 static void write_metadata(uint8_t new_chunk_idx, uint32_t new_chunk_counter, const PID_t* pitch_info, 
                                 const PID_t* roll_info, const PID_t* yaw_info) {
+    //idle and max are static to pid.c, so get a copy of their current values
+    uint16_t motor_output_idle;
+    uint16_t motor_output_max;
+    pid_get_output_limits(&motor_output_idle, &motor_output_max);
+
     FlightLogger_Metadata_t metadata = {
-                                        .log_counter = new_chunk_counter, 
-                                        .packet_version = PACKET_VERSION, 
+                                        .log_counter = new_chunk_counter,
+                                        .packet_version = PACKET_VERSION,
+                                        .motor_output_idle = motor_output_idle,
+                                        .motor_output_max = motor_output_max,
                                         .pitch_proportional_gain = pitch_info->kp, 
                                         .pitch_integrator_gain = pitch_info->ki, 
                                         .pitch_derivative_gain = pitch_info->kd,
@@ -341,7 +348,6 @@ bool flash_add_entry(const Quadcopter_State_t* current_state, const IMU_Model_t*
         uint32_t addr_to_write = (new_chunk_base_addr + (datapoint_counter / ENTRIES_PER_PAGE) * 
                                     FLASH_PAGE_SIZE_BYTES);
         page_program(&addr_to_write, FLASH_PAGE_SIZE_BYTES, (uint8_t*)data_buffer);
-        printf("flight datapoint written to: %" PRIu32 "\n", addr_to_write);
     }
     datapoint_counter++;
     return true;

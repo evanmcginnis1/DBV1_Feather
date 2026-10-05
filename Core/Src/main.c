@@ -23,6 +23,7 @@
 #include "dma.h"
 #include "i2c.h"
 #include "spi.h"
+#include "stm32f4xx_hal.h"
 #include "tim.h"
 #include "usart.h"
 #include "usb_device.h"
@@ -109,7 +110,7 @@ int main(void)
 
   /* USER CODE BEGIN 1 */
   IMU_Model_t imu_model;
-  uint16_t ibus_data_pcts[IBUS_NUM_CHANNELS];
+  uint16_t ibus_data_pcts[IBUS_NUM_CHANNELS] = {0};
   uint16_t esc_commands_pcts[4] = {0};
   Quadcopter_State_t state = SOFT_DISARM;
   bool disarm_locked = false;
@@ -171,7 +172,9 @@ int main(void)
 
   //need to start timer explicitly to run interrupt-based main loop 
   HAL_TIM_Base_Start_IT(MAIN_LOOP_TIM);
-
+  while (!ibus_read_as_percents(ibus_data_pcts)) {
+    HAL_Delay(1);
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */

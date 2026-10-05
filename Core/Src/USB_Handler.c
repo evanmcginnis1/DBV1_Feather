@@ -284,7 +284,7 @@ static void prompt_for_usb_commands(void) {
     printf("\n------------------------------------------------------------------------------------------------\n\n"
             "Please enter one of the following commands: \n\n"
             "Flight Controller USB Commands:\n"
-            "'update_pid': Allows user to update PID gain values\n"
+            "'update_pid': Allows user to update PID gain values and motor output idle/max\n"
             "'download_logs': Streams flight log data over serial to computer\n"
             "'erase': Erase either entire chip or a specific log\n"
             "'unlock': unlocks quad from hard disarm state. DANGER: AFTER TEN SECONDS, QUAD CAN POTENTIALLY BE"
@@ -458,7 +458,8 @@ void download_logs(void) {
 }
 
 static void print_flightlog_metadata_header(void) {
-    printf("Log Counter, packet_version, Pitch_P, Pitch_I, Pitch_D, Roll_P, Roll_I, Roll_D, Yaw_P, Yaw_I, Yaw_D \n");
+    printf("Log Counter, packet_version, Pitch_P, Pitch_I, Pitch_D, Roll_P, Roll_I, Roll_D, Yaw_P, Yaw_I, Yaw_D, "
+            "Motor Idle, Motor Max \n");
 }
 
 //TODO: Verify Units
@@ -469,10 +470,12 @@ static void print_flightlog_data_header(void) {
         "Motor 1 Throttle, Motor 2 Throttle, Motor 3 Throttle, Motor 4 Throttle, crc\n");
 }
 static void print_metadata(const FlightLogger_Metadata_t* metadata) {
-    printf("%" PRIu32 ", %" PRIu32 ", %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f \n", metadata->log_counter, metadata->packet_version, 
-            metadata->pitch_proportional_gain, metadata->pitch_integrator_gain, metadata->pitch_derivative_gain, 
+    printf("%" PRIu32 ", %" PRIu32 ", %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %" PRIu16 ", %" PRIu16 " \n",
+            metadata->log_counter, metadata->packet_version,
+            metadata->pitch_proportional_gain, metadata->pitch_integrator_gain, metadata->pitch_derivative_gain,
             metadata->roll_proportional_gain, metadata->roll_integrator_gain, metadata->roll_derivative_gain,
-            metadata->yaw_proportional_gain, metadata->yaw_integrator_gain, metadata->yaw_derivative_gain);
+            metadata->yaw_proportional_gain, metadata->yaw_integrator_gain, metadata->yaw_derivative_gain,
+            metadata->motor_output_idle, metadata->motor_output_max);
 }
 
 static void print_flightlog_datapoint(const FlightLog_Packet_t* datapoint) {

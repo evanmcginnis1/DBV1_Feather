@@ -12,7 +12,7 @@
  #ifndef FLIGHTLOGGER_H
  #define FLIGHTLOGGER_H
 
- #define PACKET_VERSION 1
+ #define PACKET_VERSION 3
  
  //MUST be of size 64
  typedef struct {
@@ -51,8 +51,9 @@
    uint16_t m3_output_synthesized;
    uint16_t m4_output_synthesized;
 
-
+   uint16_t reserved[2];
    uint16_t crc;
+
  } FlightLog_Packet_t;
 
  typedef struct {
@@ -60,19 +61,24 @@
    uint32_t log_counter;
    uint32_t packet_version;
 
-    float pitch_proportional_gain;
-    float pitch_integrator_gain;
-    float pitch_derivative_gain;
+   uint16_t motor_output_idle;
+   uint16_t motor_output_max;
 
-    float roll_proportional_gain;
-    float roll_integrator_gain;
-    float roll_derivative_gain;
+  float pitch_proportional_gain;
+  float pitch_integrator_gain;
+  float pitch_derivative_gain;
 
-    float yaw_proportional_gain;
-    float yaw_integrator_gain;
-    float yaw_derivative_gain;
-    uint16_t crc;
+  float roll_proportional_gain;
+  float roll_integrator_gain;
+  float roll_derivative_gain;
+
+  float yaw_proportional_gain;
+  float yaw_integrator_gain;
+  float yaw_derivative_gain;
+  uint16_t crc;
 
  } FlightLogger_Metadata_t;
 
+ _Static_assert(sizeof(FlightLog_Packet_t) == 64, "FlightLog_Packet_t must be 64 bytes");
+ _Static_assert(sizeof(FlightLogger_Metadata_t) <= 256, "Metadata must be less than 256 bytes");
 #endif
