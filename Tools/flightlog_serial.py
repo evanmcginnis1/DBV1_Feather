@@ -16,7 +16,7 @@ Requires pyserial:
     python3 -m pip install --user pyserial
 
 NOTE: this file was generated entirely by Claude Code; it is not key to the functionality of the flight controller, but 
-      rather was created to be a quick tool for simplifying the serial interface. 
+      rather was created to be a quick tool for simplifying the serial interface. Use at your own risk.
 """
 
 import csv
