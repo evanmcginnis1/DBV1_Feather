@@ -36,7 +36,7 @@
 #include "DShot.h"
 #include "iBus.h"
 #include "pid.h"
-#include "state.h"
+#include "State.h"
 #include "USB_Handler.h"
 #include "FlightLogger_Model.h"
 #include "SPIFlash_Conductor.h"
