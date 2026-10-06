@@ -633,20 +633,9 @@ static bool check_new_gain_range(const float* new_gain) {
     return *new_gain >= PID_GAIN_MIN && *new_gain <= PID_GAIN_MAX;
 }
 
-static void print_gain_out_of_range_msg(void) {
-    printf("Gain must be between %d and %d. Please try again.\n", PID_GAIN_MIN, PID_GAIN_MAX);
-}
-
 static bool check_output_limits(uint16_t idle, uint16_t max) {
     return idle <= PID_OUTPUT_IDLE_LIMIT && max <= PID_OUTPUT_MAX_LIMIT && idle < max;
 }
-
-static void print_output_limit_out_of_range_msg(void) {
-    printf("Motor output idle must be a whole number between 0 and %d, max must be a whole number no greater than %d, "
-            "and idle must be less than max (current idle = %u, max = %u). Please try again.\n",
-            PID_OUTPUT_IDLE_LIMIT, PID_OUTPUT_MAX_LIMIT, pid_output_idle, pid_output_max);
-}
-
 
 static const char* get_axis_name(const char* target_specifier) {
     if (target_specifier[0] == 'p') {
@@ -700,4 +689,14 @@ static void print_invalid_pid_axis_specifier_msg(void) {
 
 static void print_invalid_gain_specifier_msg() {
     printf("Invalid gain target specifier. Gain specifier must be p, i, or d");
+
+static void print_gain_out_of_range_msg(void) {
+    printf("Gain must be between %d and %d. Please try again.\n", PID_GAIN_MIN, PID_GAIN_MAX);
+}
+
+}
+static void print_output_limit_out_of_range_msg(void) {
+    printf("Motor output idle must be a whole number between 0 and %d, max must be a whole number no greater than %d, "
+            "and idle must be less than max (current idle = %u, max = %u). Please try again.\n",
+            PID_OUTPUT_IDLE_LIMIT, PID_OUTPUT_MAX_LIMIT, pid_output_idle, pid_output_max);
 }
