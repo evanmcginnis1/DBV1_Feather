@@ -8,6 +8,8 @@ Host-side serial console for the DBV1 flight controller.
   press Enter (no newline is sent, since the firmware treats each USB packet as a full message).
 - When the flight controller streams a log (download_logs), the log is saved to
   <repository root>/FlightLogs/FLIGHTLOG<log_number>.csv
+  Row 1 is the metadata header, row 2 is the metadata, row 3 is the data header, and the data
+  rows follow.
 
 Usage:
     python3 Tools/flightlog_serial.py [port]
@@ -135,10 +137,11 @@ class LogCapture:
         return True
 
     def _unique_stem(self):
-        # log numbers are reused after a chip erase, so never overwrite an existing file
+        # log numbers are reused after a chip erase, so never overwrite an existing file.
+        # also check for a folder of the same name, which is how some older logs are stored
         stem = f"FLIGHTLOG{self.log_number}"
         suffix = 0
-        while (self.output_dir / f"{stem}.csv").exists():
+        while (self.output_dir / f"{stem}.csv").exists() or (self.output_dir / stem).exists():
             suffix += 1
             stem = f"FLIGHTLOG{self.log_number}_{suffix}"
         return stem
@@ -148,13 +151,11 @@ class LogCapture:
         stem = self._unique_stem()
         self.path = self.output_dir / f"{stem}.csv"
 
-        with open(self.output_dir / f"{stem}_meta.csv", "w", newline="") as meta_file:
-            meta_writer = csv.writer(meta_file)
-            meta_writer.writerow(self.metadata_header)
-            meta_writer.writerow(self.metadata_row)
-
         self.file = open(self.path, "w", newline="")
         self.writer = csv.writer(self.file)
+        # metadata takes up the top two rows; data header and data rows follow
+        self.writer.writerow(self.metadata_header)
+        self.writer.writerow(self.metadata_row)
         self.writer.writerow(header_fields)
         self.num_columns = len(header_fields)
         self.num_rows = 0
