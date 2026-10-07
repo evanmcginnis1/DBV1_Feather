@@ -175,6 +175,11 @@ int main(void)
   while (!ibus_read_as_percents(ibus_data_pcts)) {
     HAL_Delay(1);
   }
+
+  //prevent arming if arm switch flipped at power-up
+  while(ibus_data_pcts[4] > 800) {
+    HAL_Delay(1);
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
