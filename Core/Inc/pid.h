@@ -111,6 +111,15 @@ bool pid_update_gains(void);
 void pid_user_update_all_gains(void);
 
 /*
+ * Requires: USB port is available
+ * Modifies: Motor output idle and max values, Virtual COM TX buffer, uart_data_ready
+ * Effects: Prints previous motor output idle and max, then prompts user for both at once. Blocks until a valid pair
+ *          is confirmed, or user types 'keep' to leave them unchanged. Only updates values in RAM; they are stored
+ *          when the next log is created
+ */
+void pid_user_update_output_limits(void);
+
+/*
  * Requires: USB port is availale
  * Modifies: Virtual COM TX buffer
  * Effects: prints gain update message format over serial
@@ -126,4 +135,5 @@ Effects:  Outputs four values (ranged 0-1000) into esc_commands_pct array
 
 void pid_update(const IMU_Model_t* imu_data, const uint16_t* pilot_commands, uint16_t* esc_commands_pct, float* setpoint_output);
 
+void pid_reset_error(void);
 #endif

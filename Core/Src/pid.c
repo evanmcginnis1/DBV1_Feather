@@ -115,6 +115,17 @@ static void print_pid_gains(const char* label);
 static void print_invalid_pid_axis_specifier_msg(void);
 static void print_invalid_gain_specifier_msg();
 
+//resets pid error accumulation so that it doesn't carry over from past flight
+void pid_reset_error(void) {
+    pid_pitch_info.accumulated_error = 0;
+    pid_pitch_info.prev_error = 0;
+
+    pid_roll_info.accumulated_error = 0;
+    pid_roll_info.prev_error = 0;
+
+    pid_yaw_info.accumulated_error = 0;
+    pid_yaw_info.prev_error = 0;
+}
 
 void pid_init(void) {
     pid_roll_info.accumulated_error = 0;
@@ -336,6 +347,7 @@ static bool update_output_limit(const char* target_specifier, const float* new_v
     }
 }
 
+//TODO: n
 void pid_user_update_all_gains(void) {
     //same order as gains are stored in flight log metadata
     float* const gain_ptrs[NUM_PID_GAINS] = {&pid_pitch_info.kp, &pid_pitch_info.ki, &pid_pitch_info.kd,
@@ -368,6 +380,7 @@ void pid_user_update_all_gains(void) {
             for (int i = 0; keyword[i] != '\0'; i++) {
                 keyword[i] = tolower((unsigned char)keyword[i]);
             }
+        
             if (strcmp(keyword, "keep") == 0) {
                 printf("Keeping current gains\n");
                 return;
@@ -405,6 +418,75 @@ void pid_user_update_all_gains(void) {
                 *gain_ptrs[i] = new_gains[i];
             }
             printf("Updated all PID gains\n");
+            print_pid_gains("New");
+            return;
+        }
+    }
+}
+
+void pid_user_update_output_limits(void) {
+    while (1) {
+        printf("\nStored motor output idle and max were erased. Previous values: idle = %u, max = %u\n"
+                "Enter both on one line, separated by a space (idle 0 to %d, max up to %d, idle must be less than max):\n"
+                "idle max\n"
+                "Or type 'keep' to keep the previous values\n",
+                pid_output_idle, pid_output_max, PID_OUTPUT_IDLE_LIMIT, PID_OUTPUT_MAX_LIMIT);
+
+        wait_for_user_input(10);
+        uart_data_ready = false;
+
+        uint8_t uart_buffer[APP_RX_DATA_SIZE];
+        uint32_t len = uart_receive_len;
+        memcpy(uart_buffer, UserRxBufferFS, sizeof(UserRxBufferFS));
+        //need null terminator to prevent sscanf from reading forever without stopping
+        if (!add_null_terminator(uart_buffer, &len)) {
+            print_output_limit_out_of_range_msg();
+            continue;
+        }
+
+        char keyword[5] = {0};
+        char extra_input[2];
+        if (sscanf((char*)uart_buffer, "%4s %1s", keyword, extra_input) == 1) {
+            for (int i = 0; keyword[i] != '\0'; i++) {
+                keyword[i] = tolower((unsigned char)keyword[i]);
+            }
+
+            if (strcmp(keyword, "keep") == 0) {
+                printf("Keeping motor output idle = %u, max = %u\n", pid_output_idle, pid_output_max);
+                return;
+            }
+        }
+
+        float new_limits[2];
+        //extra_input only gets filled if user typed more than two values, which is invalid
+        int num_read = sscanf((char*)uart_buffer, "%15f %15f %1s", &new_limits[0], &new_limits[1], extra_input);
+        if (num_read != 2) {
+            print_output_limit_out_of_range_msg();
+            continue;
+        }
+
+        //must be whole numbers on the 0-1000 percent scale. range comparison is false for NaN, so NaN is rejected too
+        bool limits_are_whole = true;
+        for (int i = 0; i < 2; i++) {
+            if (!(new_limits[i] >= 0 && new_limits[i] <= PID_OUTPUT_MAX_LIMIT) ||
+                new_limits[i] != (float)(uint16_t)new_limits[i]) {
+                limits_are_whole = false;
+            }
+        }
+        if (!limits_are_whole || !check_output_limits((uint16_t)new_limits[0], (uint16_t)new_limits[1])) {
+            print_output_limit_out_of_range_msg();
+            continue;
+        }
+
+        uint16_t new_idle = (uint16_t)new_limits[0];
+        uint16_t new_max = (uint16_t)new_limits[1];
+
+        char action_string[64];
+        snprintf(action_string, sizeof(action_string), "set motor output idle to %u and max to %u", new_idle, new_max);
+        if (confirm_user_action(action_string)) {
+            pid_output_idle = new_idle;
+            pid_output_max = new_max;
+            printf("Updated motor output idle and max\n");
             print_pid_gains("New");
             return;
         }
@@ -580,7 +662,6 @@ static void check_integrator(int16_t* signed_commands) {
             //means that accumulated error is contributing to further error
             if ((axis_info[axis]->accumulated_error * direction * axis_synth_coeffs[motor][axis]) > 0) {
                 stop_integrator[axis] = true;
-                HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
             }
         }
     }

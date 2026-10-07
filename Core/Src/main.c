@@ -254,6 +254,7 @@ int main(void)
           //create new log on disarm; functions to end previous log, and ensures that new log is setup
           if (prev_state == ARMED || prev_state == HARD_DISARM) {
             flash_new_log(pid_pitch, pid_roll, pid_yaw);
+            pid_reset_error();
           }
           HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
           break;

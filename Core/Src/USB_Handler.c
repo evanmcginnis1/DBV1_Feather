@@ -418,8 +418,9 @@ void user_flash_erase(void) {
             flash_erase_chip();
             printf("Chip erase complete. New memory map:\n");
             flash_print_memory_map();
-            //stored gains were erased along with logs, so have user set them again
+            //stored gains and motor output limits were erased along with logs, so have user set them again
             pid_user_update_all_gains();
+            pid_user_update_output_limits();
         } else {
             return;
         }
