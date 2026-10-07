@@ -108,14 +108,12 @@ static void erase_block(const uint32_t* block_addr) {
 }
 
 void erase_chunk(const uint32_t* chunk_start_addr) {
-    uint32_t block_1 = *chunk_start_addr;
-    uint32_t block_2 = *chunk_start_addr + FLASH_BLOCK_SIZE_64;
+    for (uint32_t block = 0; block < FLASH_BLOCKS_PER_CHUNK; block++) {
+        uint32_t block_addr = *chunk_start_addr + block * FLASH_BLOCK_SIZE_64;
 
-    wait_for_WIP_reset();
-    erase_block(&block_1);
-
-    wait_for_WIP_reset();
-    erase_block(&block_2);
+        wait_for_WIP_reset();
+        erase_block(&block_addr);
+    }
     wait_for_WIP_reset();
     return;
 }

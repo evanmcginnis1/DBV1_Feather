@@ -22,6 +22,10 @@
 #define FLASH_METADATA_SIZE_PAGES ((sizeof(FlightLogger_Metadata_t) + FLASH_PAGE_SIZE_BYTES - 1) / FLASH_PAGE_SIZE_BYTES)
 #define FLASH_METADATA_SIZE_BYTES (FLASH_METADATA_SIZE_PAGES * FLASH_PAGE_SIZE_BYTES)
 #define FLIGHTLOG_MAX_ENTRIES ((FLASH_CHUNK_SIZE_64 - FLASH_METADATA_SIZE_BYTES) / sizeof(FlightLog_Packet_t))
+#define MEMORY_MAP_CHUNKS_PER_ROW 4
+
+//entry counter is 16 bits, and 0xFFFF is reserved to mark erased (unused) entries
+_Static_assert(FLIGHTLOG_MAX_ENTRIES < UINT16_MAX, "Log entries must fit in 16-bit entry counter");
 
 
 

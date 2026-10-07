@@ -40,7 +40,7 @@ static void find_next_chunk(uint8_t* next_chunk_addr, uint32_t* next_chunk_count
 static bool flash_get_metadata_counter(uint8_t chunk_idx, uint32_t* counter);
 
 /*
- * Requires: new_block_addr is the address of the block to write current log to, points to chunk of two erased blocks
+ * Requires: new_block_addr is the address of the block to write current log to, points to chunk of erased blocks
              WIP flag is cleared
  * Modifies: first page of new block, CS pin, SPI bus
  * Effects: Writes metadata on first page of new chunk of blocks used for flight log. Only writes to first page of first 
@@ -355,25 +355,28 @@ bool flash_add_entry(const Quadcopter_State_t* current_state, const IMU_Model_t*
     return true;
 }
 
-// 16 chunks total; break into 4 x 4 grid
+// FLASH_NUM_CHUNKS chunks total; print in rows of MEMORY_MAP_CHUNKS_PER_ROW
 // read first chunk -> write its metadata number
 void flash_print_memory_map(void) {
     printf("Flash Memory Map: (Numbers represent log number in each chunk)\n");
 
-    for (int row = 0; row < 4; row++) {
-        printf("| ");
-        for (int col = 0; col < 4; col++) {
-            uint32_t val = chunk_map_list[row * 4 + col];
-            if (val == FLASH_CHUNK_EMPTY) {
-                printf("%8s | ", "--");
-            } else if (flash_log_is_empty(val)) {
-                //log has metadata but no datapoints (e.g. currently open log)
-                printf("%7" PRIu32 "* | ", val);
-            } else {
-                printf("%8" PRIu32 " | ", val);
-            }
+    for (int chunk = 0; chunk < FLASH_NUM_CHUNKS; chunk++) {
+        if (chunk % MEMORY_MAP_CHUNKS_PER_ROW == 0) {
+            printf("| ");
         }
-        printf("\n");
+        uint32_t val = chunk_map_list[chunk];
+        if (val == FLASH_CHUNK_EMPTY) {
+            printf("%8s | ", "--");
+        } else if (flash_log_is_empty(val)) {
+            //log has metadata but no datapoints (e.g. currently open log)
+            printf("%7" PRIu32 "* | ", val);
+        } else {
+            printf("%8" PRIu32 " | ", val);
+        }
+        //end row when it is full, or after last chunk if row is only partly filled
+        if ((chunk + 1) % MEMORY_MAP_CHUNKS_PER_ROW == 0 || chunk + 1 == FLASH_NUM_CHUNKS) {
+            printf("\n");
+        }
     }
     printf("* = no flight data\n");
 }

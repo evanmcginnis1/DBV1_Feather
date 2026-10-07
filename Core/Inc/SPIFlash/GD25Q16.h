@@ -26,8 +26,15 @@
 //Misc defines
 //flash chip has either 32 sector or 64 sector blocks
 #define FLASH_BLOCK_SIZE_64 0x010000
-#define FLASH_CHUNK_SIZE_64 (2 * FLASH_BLOCK_SIZE_64)
+// number of 64k byte blocks on flash chip
+#define FLASH_NUM_BLOCKS_64 32
+//each chunk holds one flight log. change this to resize logs; chunk size and count follow from it
+#define FLASH_BLOCKS_PER_CHUNK 4
+#define FLASH_CHUNK_SIZE_64 (FLASH_BLOCKS_PER_CHUNK * FLASH_BLOCK_SIZE_64)
+#define FLASH_NUM_CHUNKS (FLASH_NUM_BLOCKS_64 / FLASH_BLOCKS_PER_CHUNK)
 #define FLASH_PAGE_SIZE_BYTES 256
+
+_Static_assert(FLASH_NUM_BLOCKS_64 % FLASH_BLOCKS_PER_CHUNK == 0, "chunks must divide flash chip evenly");
 
 //#define FLASH_METADATA_CUTOUT_BYTES (1 * FLASH_PAGE_SIZE_BYTES)
 #define FLASH_CHUNK_EMPTY UINT32_MAX
@@ -35,10 +42,6 @@
 
 
 #define FLASH_SPI_TIMEOUT_MS 2
-//each chunk is two 64k byte blocks
-#define FLASH_NUM_CHUNKS 16
-// number of 64k byte blocks on flash chip
-#define FLASH_NUM_BLOCKS_64 32
 #define FLASH_COMMAND_SIZE 1
 #define FLASH_STATUS_LOWER_SIZE 1
 
@@ -62,7 +65,7 @@ void page_program(const uint32_t* addr, const uint16_t size, const uint8_t* data
 /* 
  * Requires: 
  * Modifies: chunk that address points to
- * Effects: Erases chunk (set of 2 consecutive blocks). Waits until erase is complete to return
+ * Effects: Erases chunk (set of FLASH_BLOCKS_PER_CHUNK consecutive blocks). Waits until erase is complete to return
  */
 void erase_chunk(const uint32_t* chunk_start_addr);
 
