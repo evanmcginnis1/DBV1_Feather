@@ -12,7 +12,7 @@
  #ifndef FLIGHTLOGGER_H
  #define FLIGHTLOGGER_H
 
- #define PACKET_VERSION 3
+ #define PACKET_VERSION 4
  
  //MUST be of size 64
  typedef struct {
@@ -25,18 +25,18 @@
 
    uint16_t batt_voltage_mV;
 
-   //data that pid loop is based on
+   //unused for rate mode
    float pitch_angle;
    float roll_angle;
 
-   //raw gyro data
+   //raw gyro data that pid loop is based on
    float pitch_rate;
    float roll_rate;
    float yaw_rate;
 
  //pilot command input after being converted into real units
-   float pilot_pitch_command_angle;
-   float pilot_roll_command_angle;
+   float pilot_pitch_command_rate;
+   float pilot_roll_command_rate;
    float pilot_yaw_command_rate;
    float pilot_throttle_command;
 //

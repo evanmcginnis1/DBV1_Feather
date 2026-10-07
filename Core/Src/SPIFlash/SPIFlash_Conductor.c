@@ -307,14 +307,16 @@ static void make_flightlog_packet(const Quadcopter_State_t* current_state, const
                                       .loop_dt_us = 1000000 / PID_LOOP_RATE_HZ,
                                       .batt_voltage_mV = 0,
 
-                                      .pitch_angle = imu_data->pitch_abs,
-                                      .roll_angle = imu_data->roll_abs,
+                                      //unused for now since in rate mode...
+                                      .pitch_angle = 0,
+                                      .roll_angle = 0,
+
                                       .pitch_rate = imu_data->pitch_rate,
                                       .roll_rate = imu_data->roll_rate,
                                       .yaw_rate = imu_data->yaw_rate,
 
-                                      .pilot_pitch_command_angle = pilot_setpoint[1],
-                                      .pilot_roll_command_angle = pilot_setpoint[0],
+                                      .pilot_pitch_command_rate = pilot_setpoint[1],
+                                      .pilot_roll_command_rate = pilot_setpoint[0],
                                       .pilot_yaw_command_rate = pilot_setpoint[3],
                                       .pilot_throttle_command = pilot_setpoint[2],
 

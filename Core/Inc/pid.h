@@ -41,10 +41,15 @@
 
 #define PID_MAX_YAW_RATE_INPUT 200
 //euler angle lockup at 45 degrees; not high performance, so don't need huge angles
-#define PID_MAX_PITCH_ANGLE_INPUT 30
-#define PID_MAX_ROLL_ANGLE_INPUT 30
+//#define PID_MAX_PITCH_ANGLE_INPUT 30
+//#define PID_MAX_ROLL_ANGLE_INPUT 30
 
-#define PID_LOOP_RATE_HZ 100
+//subject to change
+#define PID_MAX_PITCH_RATE_INPUT 350
+#define PID_MAX_ROLL_RATE_INPUT 350
+
+//400 hz seems to be max rate that BNO055 can output data in gyro only mode
+#define PID_LOOP_RATE_HZ 400
 
 #define NUM_MOTORS 4
 //pid constants are stored in a struct so that they can be updated on the fly
@@ -114,7 +119,7 @@ void pid_print_update_single_gain_prompt(void);
 /*
 Requires: pilot commands are in TAER channel sequence. pilot command values are all percent-style integers from 0-1000 
 MUST VERIFY THAT QUAD IS ARMED BEFORE CALLING THIS FUNCTION. 
-          IMU data contains fused gyroscope data
+          IMU data contains raw gyroscope rates (dps) for pitch, roll and yaw
 Modifies: esc_commands_pct array
 Effects:  Outputs four values (ranged 0-1000) into esc_commands_pct array
 */

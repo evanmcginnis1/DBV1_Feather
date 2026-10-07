@@ -465,7 +465,7 @@ static void print_flightlog_metadata_header(void) {
 //TODO: Verify Units
 static void print_flightlog_data_header(void) {
     printf("Current state, Entry Counter, Loop dt (us), Battery Voltage (mV), Pitch Angle (deg), Roll Angle (deg), Pitch Rate(dps), Roll Rate (dps)," 
-        "Yaw Rate (dps), Pilot Pitch Input (deg), Pilot Roll Command (deg), Pilot Yaw Input (dps), "
+        "Yaw Rate (dps), Pilot Pitch Input (dps), Pilot Roll Input (dps), Pilot Yaw Input (dps),"
         "Pilot Throttle Input (%%), PID Pitch Output (%%), PID Roll Output (%%), PID Yaw Output (%%), "
         "Motor 1 Throttle, Motor 2 Throttle, Motor 3 Throttle, Motor 4 Throttle, crc\n");
 }
@@ -482,7 +482,7 @@ static void print_flightlog_datapoint(const FlightLog_Packet_t* datapoint) {
     printf("%s, %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %3f, %" PRIi16 ", %" PRIi16 ", %" PRIi16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 ", %" PRIu16 "\n", 
             flight_state_to_string(&datapoint->current_state), datapoint->entry_counter, datapoint->loop_dt_us,
             datapoint->batt_voltage_mV, datapoint->pitch_angle, datapoint->roll_angle, datapoint->pitch_rate, datapoint->roll_rate, datapoint->yaw_rate,
-            datapoint->pilot_pitch_command_angle, datapoint->pilot_roll_command_angle, datapoint->pilot_yaw_command_rate, 
+            datapoint->pilot_pitch_command_rate, datapoint->pilot_roll_command_rate, datapoint->pilot_yaw_command_rate, 
             datapoint->pilot_throttle_command, datapoint->pid_pitch_out_pct, datapoint->pid_roll_out_pct, datapoint->pid_yaw_out_pct, 
             datapoint->m1_output_synthesized, datapoint->m2_output_synthesized,
             datapoint->m3_output_synthesized, datapoint->m4_output_synthesized, datapoint->crc); 

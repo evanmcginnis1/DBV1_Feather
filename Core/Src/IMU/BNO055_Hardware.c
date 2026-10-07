@@ -382,9 +382,9 @@ HAL_StatusTypeDef IMU_get_gyro_rawdata(float *pitch, float *roll, float *yaw) {
 	int16_t GYR_y_raw = (int16_t)(gyr_data[2] | (gyr_data[3] << 8));
 	int16_t GYR_z_raw = (int16_t)(gyr_data[4] | (gyr_data[5] << 8));
 
-	*pitch = (float) GYR_x_raw / IMU_EULER_ANGLE_SCALAR;
-	*roll = (float) GYR_y_raw / IMU_EULER_ANGLE_SCALAR;
-	*yaw = (float) GYR_z_raw / IMU_EULER_ANGLE_SCALAR;
+	*pitch = (float) GYR_x_raw / IMU_ANGULAR_RATE_SCALAR;
+	*roll = (float) GYR_y_raw / IMU_ANGULAR_RATE_SCALAR;
+	*yaw = (float) GYR_z_raw / IMU_ANGULAR_RATE_SCALAR;
 
 	return status;
 }

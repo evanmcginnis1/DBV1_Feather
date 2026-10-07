@@ -11,12 +11,13 @@
 
 //heading refers to the actual yaw value, not rate
 typedef struct {
-    float pitch_abs;
-    float yaw_abs;
-    float roll_abs;
     float pitch_rate;
     float yaw_rate;
     float roll_rate;
+
+    float pitch_abs;
+    float roll_abs;
+    float yaw_abs;
 } IMU_Model_t;
 
  #endif /* IMU_MODEL_H_ */
