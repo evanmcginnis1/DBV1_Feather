@@ -9,7 +9,8 @@ Host-side serial console for the DBV1 flight controller.
 - When the flight controller streams a log (download_logs), the log is saved to
   <repository root>/FlightLogs/FLIGHTLOG<log_number>.csv
   Row 1 is the metadata header, row 2 is the metadata, row 3 is the data header, and the data
-  rows follow.
+  rows follow. A "Timestamp (s)" column is added to the right of the loop dt column; it is the
+  running sum of loop dt, converted from microseconds to seconds, starting at 0 on the first row.
 
 Usage:
     python3 Tools/flightlog_serial.py [port]
@@ -42,6 +43,10 @@ METADATA_HEADER_PREFIX = "Log Counter,"
 DATA_HEADER_PREFIX = "Current state,"
 EMPTY_LOG_MARKER = "contains no datapoints"
 END_OF_LOG_MARKER = "End of log"
+# Used only to find the existing loop dt column (microseconds) in the data header printed by the
+# firmware. The one column this script adds is the timestamp, placed directly to its right
+EXISTING_DT_HEADER_PREFIX = "Loop dt"
+TIMESTAMP_HEADER = "Timestamp (s)"
 
 PORT_SCAN_INTERVAL_S = 1.0
 READ_TIMEOUT_S = 0.2
@@ -73,6 +78,8 @@ class LogCapture:
         self.path = None
         self.num_columns = 0
         self.num_rows = 0
+        self.dt_index = None
+        self.elapsed_us = 0.0
 
     def feed(self, line):
         """Process one received line. Returns True if the line should be echoed to the terminal."""
@@ -156,13 +163,39 @@ class LogCapture:
         # metadata takes up the top two rows; data header and data rows follow
         self.writer.writerow(self.metadata_header)
         self.writer.writerow(self.metadata_row)
-        self.writer.writerow(header_fields)
+        # num_columns counts columns as received, before the timestamp column is added
         self.num_columns = len(header_fields)
         self.num_rows = 0
+        self.elapsed_us = 0.0
+        # position of the loop dt column that the firmware already sends
+        self.dt_index = next((index for index, name in enumerate(header_fields)
+                              if name.startswith(EXISTING_DT_HEADER_PREFIX)), None)
+        if self.dt_index is None:
+            print(f"[flightlog] Warning: no '{EXISTING_DT_HEADER_PREFIX}' column found; saving without timestamps")
+        self.writer.writerow(self._with_timestamp(header_fields, TIMESTAMP_HEADER))
         print(f"[flightlog] Capturing log {self.log_number} -> {self.path}")
 
+    def _with_timestamp(self, fields, timestamp_cell):
+        """Returns fields with timestamp_cell inserted directly to the right of the loop dt column."""
+        if self.dt_index is None:
+            return fields
+        return fields[:self.dt_index + 1] + [timestamp_cell] + fields[self.dt_index + 1:]
+
+    def _next_timestamp(self, fields):
+        """Running sum of the loop dt column, in seconds. First row is 0; each later row adds its own dt."""
+        if self.dt_index is None:
+            return ""
+        try:
+            dt_us = float(fields[self.dt_index])
+        except (ValueError, IndexError):
+            # leave the cell empty rather than guess; later rows carry on from the last good total
+            return ""
+        if self.num_rows > 0:
+            self.elapsed_us += dt_us
+        return f"{self.elapsed_us / 1e6:.6f}"
+
     def _write_row(self, fields):
-        self.writer.writerow(fields)
+        self.writer.writerow(self._with_timestamp(fields, self._next_timestamp(fields)))
         self.num_rows += 1
         if self.num_rows % PROGRESS_EVERY_N_ROWS == 0:
             self.file.flush()
