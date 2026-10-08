@@ -21,7 +21,8 @@ void IMU_init(I2C_HandleTypeDef* hi2c) {
     IMU_enable_external_oscillator();
     //20ms delay time
     //IMU_remap_axes(IMU_AXIS_Y, IMU_AXIS_X, IMU_AXIS_Z);
-    IMU_change_axis_signs(IMU_AXIS_SIGN_POSITIVE, IMU_AXIS_SIGN_NEGATIVE, IMU_AXIS_SIGN_POSITIVE);
+    //leave axis signs at their default (positive, positive, positive)
+    //IMU_change_axis_signs(IMU_AXIS_SIGN_POSITIVE, IMU_AXIS_SIGN_NEGATIVE, IMU_AXIS_SIGN_POSITIVE);
     IMU_default_config();
 }
 
