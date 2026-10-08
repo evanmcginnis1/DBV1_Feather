@@ -274,6 +274,7 @@ HAL_StatusTypeDef IMU_remap_axes(IMU_Axis_t remap_x_value, IMU_Axis_t remap_y_va
 	return status;
 }
 
+
 HAL_StatusTypeDef IMU_change_axis_signs(IMU_Axis_Sign_t x_sign, IMU_Axis_Sign_t y_sign, IMU_Axis_Sign_t z_sign) {
 	uint8_t axis_map_sign_buf;
 	HAL_StatusTypeDef status = IMU_read_register(IMU_REG_AXIS_MAP_SIGN, &axis_map_sign_buf, 1);
