@@ -33,10 +33,10 @@ static uint16_t pid_output_idle;
 static uint16_t pid_output_max;
 
 //roll, pitch, yaw
-static int8_t axis_synth_coeffs[NUM_MOTORS][3] = {{+1, +1, -1},
-                                                  {-1, +1, +1},
-                                                  {+1, -1, +1},
-                                                  {-1, -1, -1}};
+static int8_t axis_synth_coeffs[NUM_MOTORS][3] = {{+1, -1, -1},
+                                                  {-1, -1, +1},
+                                                  {+1, +1, +1},
+                                                  {-1, +1, -1}};
 
 // Static Functions
 /*
@@ -596,8 +596,9 @@ static void pilot_command_to_setpoint(const uint16_t* pilot_command, float* setp
     setpoint[0] = (((float)pilot_command[0] - 500.0f) / 500.0f) * (float)PID_MAX_ROLL_RATE_INPUT;
     //pitch - should map to value between -PID_MAX_PITCH_RATE_INPUT and +PID_MAX_PITCH_RATE_INPUT
     setpoint[1] = (((float)pilot_command[1] - 500.0f) / 500.0f) * (float)PID_MAX_PITCH_RATE_INPUT;
-    //yaw - should map to a value between -PID_MAX_YAW_RATE_INPUT and +PID_MAX_YAW_RATE_INPUT
-    setpoint[3] = (((float)pilot_command[3] - 500.0f) / 500.0f) * (float)PID_MAX_YAW_RATE_INPUT;
+    //yaw - should map to a value between -PID_MAX_YAW_RATE_INPUT and +PID_MAX_YAW_RATE_INPUT. Flip sign because
+    //gyro is based on ccw being positive but controller is based on normal controller convention
+    setpoint[3] = (((float)pilot_command[3] - 500.0f) / 500.0f) * (float)PID_MAX_YAW_RATE_INPUT * -1;
 
     //throttle - stick fully down is idle, fully up is max
     uint16_t throttle_pct = pilot_command[2];
@@ -614,12 +615,18 @@ static void synthesize_pid_commands(const float* throttle_command_pct, uint16_t*
     //synthesize commands
     //esc_command index corresponds to motor index on quadcopter
     int16_t signed_commands[NUM_MOTORS];
+    //pitch imu angle is negative when front of quad goes up, so correction factor is positive
+    //roll imu angle is positive when left of quad goes down, so 
+    //
     //roll, pitch, yaw
-
-    signed_commands[0] = *throttle_command_pct + pid_axis_out_pct.pitch_pct + pid_axis_out_pct.roll_pct - pid_axis_out_pct.yaw_pct;
-    signed_commands[1] = *throttle_command_pct + pid_axis_out_pct.pitch_pct - pid_axis_out_pct.roll_pct + pid_axis_out_pct.yaw_pct;
-    signed_commands[2] = *throttle_command_pct - pid_axis_out_pct.pitch_pct + pid_axis_out_pct.roll_pct + pid_axis_out_pct.yaw_pct;
-    signed_commands[3] = *throttle_command_pct - pid_axis_out_pct.pitch_pct - pid_axis_out_pct.roll_pct - pid_axis_out_pct.yaw_pct;
+    //front left
+    signed_commands[0] = *throttle_command_pct - pid_axis_out_pct.pitch_pct + pid_axis_out_pct.roll_pct - pid_axis_out_pct.yaw_pct;
+    //front right
+    signed_commands[1] = *throttle_command_pct - pid_axis_out_pct.pitch_pct - pid_axis_out_pct.roll_pct + pid_axis_out_pct.yaw_pct;
+    //back left
+    signed_commands[2] = *throttle_command_pct + pid_axis_out_pct.pitch_pct + pid_axis_out_pct.roll_pct + pid_axis_out_pct.yaw_pct;
+    //back right
+    signed_commands[3] = *throttle_command_pct + pid_axis_out_pct.pitch_pct - pid_axis_out_pct.roll_pct - pid_axis_out_pct.yaw_pct;
 
     check_integrator(signed_commands);
 
