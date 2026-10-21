@@ -274,6 +274,7 @@ HAL_StatusTypeDef IMU_remap_axes(IMU_Axis_t remap_x_value, IMU_Axis_t remap_y_va
 	return status;
 }
 
+
 HAL_StatusTypeDef IMU_change_axis_signs(IMU_Axis_Sign_t x_sign, IMU_Axis_Sign_t y_sign, IMU_Axis_Sign_t z_sign) {
 	uint8_t axis_map_sign_buf;
 	HAL_StatusTypeDef status = IMU_read_register(IMU_REG_AXIS_MAP_SIGN, &axis_map_sign_buf, 1);
@@ -382,9 +383,9 @@ HAL_StatusTypeDef IMU_get_gyro_rawdata(float *pitch, float *roll, float *yaw) {
 	int16_t GYR_y_raw = (int16_t)(gyr_data[2] | (gyr_data[3] << 8));
 	int16_t GYR_z_raw = (int16_t)(gyr_data[4] | (gyr_data[5] << 8));
 
-	*pitch = (float) GYR_x_raw / IMU_EULER_ANGLE_SCALAR;
-	*roll = (float) GYR_y_raw / IMU_EULER_ANGLE_SCALAR;
-	*yaw = (float) GYR_z_raw / IMU_EULER_ANGLE_SCALAR;
+	*pitch = (float) GYR_x_raw / IMU_ANGULAR_RATE_SCALAR;
+	*roll = (float) GYR_y_raw / IMU_ANGULAR_RATE_SCALAR;
+	*yaw = (float) GYR_z_raw / IMU_ANGULAR_RATE_SCALAR;
 
 	return status;
 }

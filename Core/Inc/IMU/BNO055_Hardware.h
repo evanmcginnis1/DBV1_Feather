@@ -519,7 +519,9 @@ HAL_StatusTypeDef IMU_set_gyro_config(IMU_GyroConfig_t* gyro_config);
 HAL_StatusTypeDef IMU_set_mag_config(IMU_MagConfig_t* mag_config);
 
 HAL_StatusTypeDef IMU_remap_axes(IMU_Axis_t remap_x_value, IMU_Axis_t remap_y_value, IMU_Axis_t remap_z_value);
-HAL_StatusTypeDef IMU_change_axis_signs(IMU_Axis_Sign_t x_sign, IMU_Axis_Sign_t y_sign, IMU_Axis_Sign_t z_sign);
+//
+HAL_StatusTypeDef IMU_change_axis_signs(IMU_Axis_Sign_t roll_sign, IMU_Axis_Sign_t pitch_sign, IMU_Axis_Sign_t z_sign);
+
 /*************************************************
 *              Sensor Calibration                *
 **************************************************/

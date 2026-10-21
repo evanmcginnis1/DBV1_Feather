@@ -32,10 +32,11 @@ static Pid_Output_t pid_axis_out_pct;
 static uint16_t pid_output_idle;
 static uint16_t pid_output_max;
 
-static int8_t axis_synth_coeffs[NUM_MOTORS][3] = {{+1, +1, -1},
-                                                  {+1, -1, +1}, 
-                                                  {-1, +1, +1}, 
-                                                  {-1, -1, -1}};
+//roll, pitch, yaw
+static int8_t axis_synth_coeffs[NUM_MOTORS][3] = {{+1, -1, -1},
+                                                  {-1, -1, +1},
+                                                  {+1, +1, +1},
+                                                  {-1, +1, -1}};
 
 // Static Functions
 /*
@@ -48,14 +49,14 @@ Effects: calculates error, integrated error, and the rate of change of the error
 */
 static void pid_step(PID_t* pid_info, const float* actual_val, const float* setpoint, int16_t* output);
 /*
-Requires: imu has been updated with data from the imu. setpoint is an array of values representing degrees for pitch and
-          roll and degrees per second for yaw.
+Requires: imu has been updated with data from the imu. setpoint is an array of values representing degrees per
+          second for pitch, roll and yaw.
 Modifies: setpoint array
 Effects: Calls pid_step for each axis. 
 */
 static void pid_step_all(const IMU_Model_t* imu, const float* setpoint);
 /*
-Requires: throttle_command is an integer value between 0 and 1000 representing the pilot's throttle input. 
+Requires: throttle_command is the pilot's throttle input, already mapped to a value between motor output idle and max. 
           esc_commands_pct is an array holding values to be passed to the esc
 Modifies: updates esc_commands_pct array
 Effects:  converts axis & throttle commands into individual motor commands. Calls check_integrator function
@@ -64,7 +65,7 @@ static void synthesize_pid_commands(const float* throttle_command, uint16_t* esc
 /*
 Requires: pilot_command is an array of four values between 0 and 1000
 Modifies: setpoint array
-Effects: converts pilot pitch, roll command into degrees, yaw into dps, throttle stays the same
+Effects: converts pilot pitch, roll, yaw command into dps, maps throttle onto motor output idle..max
 */
 static void pilot_command_to_setpoint(const uint16_t* pilot_command, float* setpoint);
 
@@ -114,6 +115,17 @@ static void print_pid_gains(const char* label);
 static void print_invalid_pid_axis_specifier_msg(void);
 static void print_invalid_gain_specifier_msg();
 
+//resets pid error accumulation so that it doesn't carry over from past flight
+void pid_reset_error(void) {
+    pid_pitch_info.accumulated_error = 0;
+    pid_pitch_info.prev_error = 0;
+
+    pid_roll_info.accumulated_error = 0;
+    pid_roll_info.prev_error = 0;
+
+    pid_yaw_info.accumulated_error = 0;
+    pid_yaw_info.prev_error = 0;
+}
 
 void pid_init(void) {
     pid_roll_info.accumulated_error = 0;
@@ -335,6 +347,7 @@ static bool update_output_limit(const char* target_specifier, const float* new_v
     }
 }
 
+//TODO: n
 void pid_user_update_all_gains(void) {
     //same order as gains are stored in flight log metadata
     float* const gain_ptrs[NUM_PID_GAINS] = {&pid_pitch_info.kp, &pid_pitch_info.ki, &pid_pitch_info.kd,
@@ -367,6 +380,7 @@ void pid_user_update_all_gains(void) {
             for (int i = 0; keyword[i] != '\0'; i++) {
                 keyword[i] = tolower((unsigned char)keyword[i]);
             }
+        
             if (strcmp(keyword, "keep") == 0) {
                 printf("Keeping current gains\n");
                 return;
@@ -404,6 +418,75 @@ void pid_user_update_all_gains(void) {
                 *gain_ptrs[i] = new_gains[i];
             }
             printf("Updated all PID gains\n");
+            print_pid_gains("New");
+            return;
+        }
+    }
+}
+
+void pid_user_update_output_limits(void) {
+    while (1) {
+        printf("\nStored motor output idle and max were erased. Previous values: idle = %u, max = %u\n"
+                "Enter both on one line, separated by a space (idle 0 to %d, max up to %d, idle must be less than max):\n"
+                "idle max\n"
+                "Or type 'keep' to keep the previous values\n",
+                pid_output_idle, pid_output_max, PID_OUTPUT_IDLE_LIMIT, PID_OUTPUT_MAX_LIMIT);
+
+        wait_for_user_input(10);
+        uart_data_ready = false;
+
+        uint8_t uart_buffer[APP_RX_DATA_SIZE];
+        uint32_t len = uart_receive_len;
+        memcpy(uart_buffer, UserRxBufferFS, sizeof(UserRxBufferFS));
+        //need null terminator to prevent sscanf from reading forever without stopping
+        if (!add_null_terminator(uart_buffer, &len)) {
+            print_output_limit_out_of_range_msg();
+            continue;
+        }
+
+        char keyword[5] = {0};
+        char extra_input[2];
+        if (sscanf((char*)uart_buffer, "%4s %1s", keyword, extra_input) == 1) {
+            for (int i = 0; keyword[i] != '\0'; i++) {
+                keyword[i] = tolower((unsigned char)keyword[i]);
+            }
+
+            if (strcmp(keyword, "keep") == 0) {
+                printf("Keeping motor output idle = %u, max = %u\n", pid_output_idle, pid_output_max);
+                return;
+            }
+        }
+
+        float new_limits[2];
+        //extra_input only gets filled if user typed more than two values, which is invalid
+        int num_read = sscanf((char*)uart_buffer, "%15f %15f %1s", &new_limits[0], &new_limits[1], extra_input);
+        if (num_read != 2) {
+            print_output_limit_out_of_range_msg();
+            continue;
+        }
+
+        //must be whole numbers on the 0-1000 percent scale. range comparison is false for NaN, so NaN is rejected too
+        bool limits_are_whole = true;
+        for (int i = 0; i < 2; i++) {
+            if (!(new_limits[i] >= 0 && new_limits[i] <= PID_OUTPUT_MAX_LIMIT) ||
+                new_limits[i] != (float)(uint16_t)new_limits[i]) {
+                limits_are_whole = false;
+            }
+        }
+        if (!limits_are_whole || !check_output_limits((uint16_t)new_limits[0], (uint16_t)new_limits[1])) {
+            print_output_limit_out_of_range_msg();
+            continue;
+        }
+
+        uint16_t new_idle = (uint16_t)new_limits[0];
+        uint16_t new_max = (uint16_t)new_limits[1];
+
+        char action_string[64];
+        snprintf(action_string, sizeof(action_string), "set motor output idle to %u and max to %u", new_idle, new_max);
+        if (confirm_user_action(action_string)) {
+            pid_output_idle = new_idle;
+            pid_output_max = new_max;
+            printf("Updated motor output idle and max\n");
             print_pid_gains("New");
             return;
         }
@@ -469,9 +552,9 @@ void pid_print_update_single_gain_prompt(void) {
 //pilot_command[4] = ARM/DISARM
 static void pid_step_all(const IMU_Model_t* imu, const float* setpoint) {
     //PID roll step
-    pid_step(&pid_roll_info, &imu->roll_abs, &setpoint[0], &pid_axis_out_pct.roll_pct);
+    pid_step(&pid_roll_info, &imu->roll_rate, &setpoint[0], &pid_axis_out_pct.roll_pct);
     //PID pitch step
-    pid_step(&pid_pitch_info, &imu->pitch_abs, &setpoint[1], &pid_axis_out_pct.pitch_pct);
+    pid_step(&pid_pitch_info, &imu->pitch_rate, &setpoint[1], &pid_axis_out_pct.pitch_pct);
     //PID yaw step
     pid_step(&pid_yaw_info, &imu->yaw_rate, &setpoint[3], &pid_axis_out_pct.yaw_pct);
 
@@ -494,7 +577,7 @@ static void pid_step(PID_t* pid_info, const float* actual_val, const float* setp
     pid_info->accumulated_error += pid_info->new_accum_error;
 }
 
-//map pilot axis input to a number between 0 and 180.
+//map pilot axis input to a rate in dps.
 // Pilot command is a number between 1000 and 2000. 
 //setpoint[0] = roll
 //setpoint[1] = pitch
@@ -504,20 +587,26 @@ static void pid_step(PID_t* pid_info, const float* actual_val, const float* setp
 /*
 Requires: pilot_command is an array of input values in percent form, each between 0 and 1000
 Modifies: setpoint array
-Effects: Converts pilot_command percentages into degrees/dps and leaves throttle value between 0-1000
+Effects: Converts pilot_command percentages into dps and maps throttle linearly onto motor output idle..max
 */
 static void pilot_command_to_setpoint(const uint16_t* pilot_command, float* setpoint) {
     //axis commands
 
-    //roll - should map to value between -90 and +90
-    setpoint[0] = (((float)pilot_command[0] - 500.0f) / 500.0f) * (float)PID_MAX_ROLL_ANGLE_INPUT;
-    //pitch - should map to value between -90 and +90
-    setpoint[1] = (((float)pilot_command[1] - 500.0f) / 500.0f) * (float)PID_MAX_PITCH_ANGLE_INPUT;
-    //yaw - should map to a value between -500 and 500
-    setpoint[3] = (((float)pilot_command[3] - 500.0f) / 500.0f) * (float)PID_MAX_YAW_RATE_INPUT;
+    //roll - should map to value between -PID_MAX_ROLL_RATE_INPUT and +PID_MAX_ROLL_RATE_INPUT
+    setpoint[0] = (((float)pilot_command[0] - 500.0f) / 500.0f) * (float)PID_MAX_ROLL_RATE_INPUT;
+    //pitch - should map to value between -PID_MAX_PITCH_RATE_INPUT and +PID_MAX_PITCH_RATE_INPUT
+    setpoint[1] = (((float)pilot_command[1] - 500.0f) / 500.0f) * (float)PID_MAX_PITCH_RATE_INPUT;
+    //yaw - should map to a value between -PID_MAX_YAW_RATE_INPUT and +PID_MAX_YAW_RATE_INPUT. Flip sign because
+    //gyro is based on ccw being positive but controller is based on normal controller convention
+    setpoint[3] = (((float)pilot_command[3] - 500.0f) / 500.0f) * (float)PID_MAX_YAW_RATE_INPUT * -1;
 
-    //throttle command stays as a value between 0 and 1000
-    setpoint[2] = pilot_command[2] / 2.0f;
+    //throttle - stick fully down is idle, fully up is max
+    uint16_t throttle_pct = pilot_command[2];
+    if (throttle_pct > 1000) {
+        throttle_pct = 1000;
+    }
+    setpoint[2] = (float)pid_output_idle +
+                  ((float)throttle_pct / 1000.0f) * (float)(pid_output_max - pid_output_idle);
 }
 
 
@@ -526,12 +615,18 @@ static void synthesize_pid_commands(const float* throttle_command_pct, uint16_t*
     //synthesize commands
     //esc_command index corresponds to motor index on quadcopter
     int16_t signed_commands[NUM_MOTORS];
+    //pitch imu angle is negative when front of quad goes up, so correction factor is positive
+    //roll imu angle is positive when left of quad goes down, so 
+    //
     //roll, pitch, yaw
-
-    signed_commands[0] = *throttle_command_pct + pid_axis_out_pct.roll_pct + pid_axis_out_pct.pitch_pct - pid_axis_out_pct.yaw_pct;
-    signed_commands[1] = *throttle_command_pct + pid_axis_out_pct.roll_pct - pid_axis_out_pct.pitch_pct + pid_axis_out_pct.yaw_pct;
-    signed_commands[2] = *throttle_command_pct - pid_axis_out_pct.roll_pct + pid_axis_out_pct.pitch_pct + pid_axis_out_pct.yaw_pct;
-    signed_commands[3] = *throttle_command_pct - pid_axis_out_pct.roll_pct - pid_axis_out_pct.pitch_pct - pid_axis_out_pct.yaw_pct;
+    //front left
+    signed_commands[0] = *throttle_command_pct - pid_axis_out_pct.pitch_pct + pid_axis_out_pct.roll_pct - pid_axis_out_pct.yaw_pct;
+    //front right
+    signed_commands[1] = *throttle_command_pct - pid_axis_out_pct.pitch_pct - pid_axis_out_pct.roll_pct + pid_axis_out_pct.yaw_pct;
+    //back left
+    signed_commands[2] = *throttle_command_pct + pid_axis_out_pct.pitch_pct + pid_axis_out_pct.roll_pct + pid_axis_out_pct.yaw_pct;
+    //back right
+    signed_commands[3] = *throttle_command_pct + pid_axis_out_pct.pitch_pct - pid_axis_out_pct.roll_pct - pid_axis_out_pct.yaw_pct;
 
     check_integrator(signed_commands);
 
@@ -574,7 +669,6 @@ static void check_integrator(int16_t* signed_commands) {
             //means that accumulated error is contributing to further error
             if ((axis_info[axis]->accumulated_error * direction * axis_synth_coeffs[motor][axis]) > 0) {
                 stop_integrator[axis] = true;
-                HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_1);
             }
         }
     }
@@ -689,12 +783,12 @@ static void print_invalid_pid_axis_specifier_msg(void) {
 
 static void print_invalid_gain_specifier_msg() {
     printf("Invalid gain target specifier. Gain specifier must be p, i, or d");
+}
 
 static void print_gain_out_of_range_msg(void) {
     printf("Gain must be between %d and %d. Please try again.\n", PID_GAIN_MIN, PID_GAIN_MAX);
 }
 
-}
 static void print_output_limit_out_of_range_msg(void) {
     printf("Motor output idle must be a whole number between 0 and %d, max must be a whole number no greater than %d, "
             "and idle must be less than max (current idle = %u, max = %u). Please try again.\n",

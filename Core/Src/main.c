@@ -53,6 +53,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+//debug print runs once every this many main loop ticks
+#define DEBUG_PRINT_LOOP_DIVIDER 20
 
 /* USER CODE END PD */
 
@@ -99,6 +101,20 @@ int _write(int file, char *ptr, int len) {
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
 //for timer
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
+/*
+//debugging only: prints IMU pitch rate (deg/s) once every DEBUG_PRINT_LOOP_DIVIDER calls
+//printf blocks while USB is busy, so this must not be called while armed
+static void debug_print_pitch_rate(const IMU_Model_t* imu_model) {
+  static uint8_t loop_count = 0;
+
+  if (++loop_count < DEBUG_PRINT_LOOP_DIVIDER) {
+    return;
+  }
+  loop_count = 0;
+
+  printf("Pitch: %.2f | Roll: %.2f | Yaw: %.2f\n", imu_model->pitch_rate, imu_model->roll_rate, imu_model->yaw_rate);
+}
+*/
 /* USER CODE END 0 */
 
 /**
@@ -148,7 +164,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   set_loop_rate(PID_LOOP_RATE_HZ);
 
-  dshot_init(DSHOT300);
+  dshot_init(DSHOT600);
   ibus_init(IBUS_UART);
   IMU_init(&hi2c1);
   //flash must be initialized before pid, since pid gains are loaded from most recent flight log
@@ -173,6 +189,11 @@ int main(void)
   //need to start timer explicitly to run interrupt-based main loop 
   HAL_TIM_Base_Start_IT(MAIN_LOOP_TIM);
   while (!ibus_read_as_percents(ibus_data_pcts)) {
+    HAL_Delay(1);
+  }
+
+  //prevent arming if arm switch flipped at power-up
+  while(ibus_data_pcts[4] > 800) {
     HAL_Delay(1);
   }
   /* USER CODE END 2 */
@@ -249,10 +270,17 @@ int main(void)
           //create new log on disarm; functions to end previous log, and ensures that new log is setup
           if (prev_state == ARMED || prev_state == HARD_DISARM) {
             flash_new_log(pid_pitch, pid_roll, pid_yaw);
+            pid_reset_error();
           }
           HAL_GPIO_WritePin(GPIOC, GPIO_PIN_1, GPIO_PIN_SET);
           break;
       }
+/*
+      //debugging only: kept out of the armed path since printf can block
+      if (state != ARMED) {
+        debug_print_pitch_rate(&imu_model);
+      }
+*/
       prev_state = state;
     }
   }
